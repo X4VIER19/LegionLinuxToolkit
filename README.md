@@ -73,17 +73,23 @@ Adaptadores de solo lectura ── sysfs / hwmon / WMI (opt-in)
 Kernel y firmware
 ```
 
-## Fase 1: Rust y datos simulados
+## Fases 1–3: Rust, compatibilidad y WMI simulado
 
 El workspace contiene `legion-core` (modelos y parser puro), `legion-cli`
 (salida legible y JSON) y `legion-fixtures` (snapshots embebidos). No usa
-dependencias externas ni lee rutas del host; las entradas del CLI son fixtures
+adaptadores del host ni lee rutas del host; las entradas del CLI son fixtures
 incluidas y las pruebas rechazan nombres de rutas como `/sys`.
 
 Cada adaptador devuelve datos tipados junto con procedencia, unidad, marca de
 tiempo y nivel de confianza. Las operaciones de escritura serán un componente
 independiente, ausente del primer prototipo y bloqueado por una política de
 autorización explícita.
+
+La Fase 3 incorpora en `legion-core` un contrato de transporte WMI independiente
+de Linux y, en `legion-fixtures`, su única implementación: un transporte de
+respuestas sintéticas en memoria. No presupone un ABI binario, identificador de
+método ni interfaz WMI funcional desde espacio de usuario en Nobara. El CLI
+puede mostrar únicamente esos escenarios simulados, nunca invocar firmware.
 
 La propuesta detallada y el plan están en [docs/architecture.md](docs/architecture.md)
 y [docs/development-plan.md](docs/development-plan.md). Los hechos observados
@@ -95,6 +101,7 @@ están separados de las hipótesis en [docs/known-interfaces.md](docs/known-inte
 - [Resultados Windows y WMI](docs/windows-wmi-observations.md)
 - [Interfaces conocidas](docs/known-interfaces.md)
 - [Registro de compatibilidad](docs/compatibility-registry.md)
+- [Transporte WMI simulado](docs/wmi-transport-simulation.md)
 - [Arquitectura modular](docs/architecture.md)
 - [Plan incremental](docs/development-plan.md)
 - [Fuentes y licencias](docs/research-sources.md)

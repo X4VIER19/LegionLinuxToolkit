@@ -6,10 +6,15 @@ use serde::Serialize;
 use std::fmt;
 
 mod compatibility;
+mod wmi;
 
 pub use compatibility::{
     CapabilityRecord, CompatibilityProfile, CompatibilityRegistry, CompatibilityStatus,
     DeviceDescriptor, DeviceQuery, Evidence, EvidenceKind, MatchResult, ObservationPlatform,
+};
+pub use wmi::{
+    WmiAccess, WmiArgument, WmiArtifact, WmiKnowledge, WmiMethodMetadata, WmiObservationPlatform,
+    WmiOperation, WmiProvenance, WmiRequest, WmiResponse, WmiTransport, WmiTransportError,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

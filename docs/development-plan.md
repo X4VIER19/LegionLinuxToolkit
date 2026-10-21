@@ -50,10 +50,11 @@ escritura basándose solo en GUID, familia, DMI o una tabla de otro modelo.
 
 Definir una abstracción de transporte que permita construir y validar una
 petición de método sin enviarla, usando exclusivamente datos simulados. Añadir
-fixtures de respuestas conocidas de Windows y pruebas de decodificación,
-longitudes y rangos de tablas. La aplicación debe seguir funcionando sin un
-transporte WMI real. Las fixtures deben conservar procedencia (Windows, BIOS,
-perfil y argumentos) y no convertir una observación de LLT/WMI en
+fixtures de respuestas opacas sintéticas, derivadas de observaciones conocidas
+de Windows, y pruebas de errores y longitudes. No se descodifica el ABI ni se
+infieren rangos o tablas de los bytes. La aplicación debe seguir funcionando sin
+un transporte WMI real. Las fixtures deben conservar procedencia (Windows,
+BIOS, perfil y argumentos) y no convertir una observación de LLT/WMI en
 compatibilidad Linux validada.
 
 No está confirmada una interfaz WMI funcional desde espacio de usuario en
@@ -62,7 +63,8 @@ invocar métodos WMI. Esta fase no implementa ni prueba transporte WMI real, no
 es un controlador del kernel y no justifica cargar módulos.
 
 **Criterio de salida:** se valida el contrato de buffers offline; no hay
-`Fan_Get_Table` ni `Fan_Set_Table` ejecutable desde detección o CI. Ningún
+`Fan_Get_Table` ni `Fan_Set_Table` ejecutable desde detección o CI, y los bytes
+de fixture están marcados como sintéticos. Ningún
 callback del futuro controlador (`probe()`, `init()`, `remove()` o
 `shutdown()`) puede añadir llamadas WMI sin revisión y aprobación específicas.
 

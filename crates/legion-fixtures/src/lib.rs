@@ -2,7 +2,9 @@
 
 use legion_core::{
     CapabilityRecord, CompatibilityProfile, CompatibilityRegistry, CompatibilityStatus,
-    DeviceDescriptor, DeviceQuery, Evidence, EvidenceKind, ObservationPlatform,
+    DeviceDescriptor, DeviceQuery, Evidence, EvidenceKind, ObservationPlatform, WmiArgument,
+    WmiArtifact, WmiKnowledge, WmiMethodMetadata, WmiObservationPlatform, WmiOperation,
+    WmiProvenance, WmiRequest, WmiResponse, WmiTransport, WmiTransportError,
 };
 
 pub const VALID: &str = include_str!("../data/valid.snapshot");
@@ -94,6 +96,118 @@ pub fn compatibility_query(name: &str) -> Option<DeviceQuery> {
     }
 }
 
+/// Named simulated WMI outcomes. They select in-memory fixtures only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WmiScenario {
+    Valid,
+    Unavailable,
+    InconsistentBuffer,
+    UnsupportedOperation,
+}
+
+pub fn wmi_scenario(name: &str) -> Option<WmiScenario> {
+    match name {
+        "valid" => Some(WmiScenario::Valid),
+        "unavailable" => Some(WmiScenario::Unavailable),
+        "inconsistent-buffer" => Some(WmiScenario::InconsistentBuffer),
+        "unsupported" => Some(WmiScenario::UnsupportedOperation),
+        _ => None,
+    }
+}
+
+/// A documented Windows request represented as data, not a callable method.
+pub fn documented_fan_get_table_request() -> WmiRequest {
+    WmiRequest {
+        operation: WmiOperation::FanGetTable,
+        access: legion_core::WmiAccess::ReadOnly,
+        arguments: vec![
+            WmiArgument {
+                name: "FanID".to_owned(),
+                value: 1,
+                knowledge: WmiKnowledge::Observed,
+            },
+            WmiArgument {
+                name: "SensorID".to_owned(),
+                value: 4,
+                knowledge: WmiKnowledge::Observed,
+            },
+        ],
+        method: WmiMethodMetadata {
+            observed_name: Some("Fan_Get_Table".to_owned()),
+            method_identifier: None,
+            request_abi: WmiKnowledge::Unknown,
+            response_abi: WmiKnowledge::Unknown,
+        },
+        provenance: windows_wmi_provenance(WmiKnowledge::Observed),
+    }
+}
+
+/// An isolated transport that returns synthetic bytes and never reaches the host.
+#[derive(Debug, Clone, Copy)]
+pub struct SimulatedWmiTransport {
+    scenario: WmiScenario,
+}
+
+impl SimulatedWmiTransport {
+    pub fn new(scenario: WmiScenario) -> Self {
+        Self { scenario }
+    }
+}
+
+impl WmiTransport for SimulatedWmiTransport {
+    fn execute(&self, request: &WmiRequest) -> Result<WmiResponse, WmiTransportError> {
+        if !matches!(&request.operation, WmiOperation::FanGetTable) {
+            return Err(WmiTransportError::UnsupportedOperation {
+                operation: request.operation.label().to_owned(),
+            });
+        }
+        match self.scenario {
+            WmiScenario::Valid => {
+                // Deliberately synthetic opaque bytes, not a captured WMI buffer.
+                let bytes = vec![0x4c, 0x4c, 0x54, 0x2d, 0x53, 0x49, 0x4d];
+                Ok(WmiResponse {
+                    reported_buffer_size: bytes.len(),
+                    bytes,
+                    provenance: WmiProvenance {
+                        artifact: WmiArtifact::StaticSimulation,
+                        observed_on: WmiObservationPlatform::Windows,
+                        source: "docs/windows-wmi-observations.md".to_owned(),
+                        bios_version: Some("NUCN15WW".to_owned()),
+                        knowledge: WmiKnowledge::Hypothesis,
+                    },
+                })
+            }
+            WmiScenario::Unavailable => Err(WmiTransportError::MethodUnavailable {
+                operation: request.operation.label().to_owned(),
+                reason: "fixture simulates an unavailable method; no host fallback exists"
+                    .to_owned(),
+            }),
+            WmiScenario::InconsistentBuffer => {
+                let response = WmiResponse {
+                    reported_buffer_size: 8,
+                    bytes: vec![0x00, 0x01],
+                    provenance: windows_wmi_provenance(WmiKnowledge::Hypothesis),
+                };
+                response.validate_buffer_size()?;
+                Ok(response)
+            }
+            WmiScenario::UnsupportedOperation => Err(WmiTransportError::UnsupportedOperation {
+                operation: request.operation.label().to_owned(),
+            }),
+        }
+    }
+}
+
+fn windows_wmi_provenance(knowledge: WmiKnowledge) -> WmiProvenance {
+    WmiProvenance {
+        artifact: WmiArtifact::StaticSimulation,
+        observed_on: WmiObservationPlatform::Windows,
+        source: "docs/windows-wmi-observations.md".to_owned(),
+        bios_version: Some("NUCN15WW".to_owned()),
+        knowledge,
+    }
+}
+
 fn capability(key: &str, status: CompatibilityStatus, evidence: Evidence) -> CapabilityRecord {
     CapabilityRecord::descriptive(key, status, evidence)
 }
@@ -157,5 +271,44 @@ mod tests {
             .unwrap();
         assert_eq!(windows.status, CompatibilityStatus::Observed);
         assert_eq!(windows.evidence[0].platform, ObservationPlatform::Windows);
+    }
+
+    #[test]
+    fn valid_wmi_fixture_is_synthetic_and_has_a_consistent_buffer() {
+        let response = SimulatedWmiTransport::new(WmiScenario::Valid)
+            .execute(&documented_fan_get_table_request())
+            .unwrap();
+        assert_eq!(response.provenance.artifact, WmiArtifact::StaticSimulation);
+        assert_eq!(response.provenance.knowledge, WmiKnowledge::Hypothesis);
+        assert_eq!(response.validate_buffer_size(), Ok(()));
+    }
+
+    #[test]
+    fn wmi_fixtures_report_errors_without_a_host_fallback() {
+        let request = documented_fan_get_table_request();
+        assert!(matches!(
+            SimulatedWmiTransport::new(WmiScenario::Unavailable).execute(&request),
+            Err(WmiTransportError::MethodUnavailable { .. })
+        ));
+        assert!(matches!(
+            SimulatedWmiTransport::new(WmiScenario::InconsistentBuffer).execute(&request),
+            Err(WmiTransportError::InconsistentBufferSize { .. })
+        ));
+        assert!(matches!(
+            SimulatedWmiTransport::new(WmiScenario::UnsupportedOperation).execute(&request),
+            Err(WmiTransportError::UnsupportedOperation { .. })
+        ));
+    }
+
+    #[test]
+    fn refuses_an_operation_not_modelled_by_the_fixture() {
+        let mut request = documented_fan_get_table_request();
+        request.operation = WmiOperation::OtherReadOnly {
+            label: "unknown-read".to_owned(),
+        };
+        assert!(matches!(
+            SimulatedWmiTransport::new(WmiScenario::Valid).execute(&request),
+            Err(WmiTransportError::UnsupportedOperation { .. })
+        ));
     }
 }
