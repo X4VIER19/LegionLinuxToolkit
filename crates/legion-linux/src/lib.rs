@@ -1,14 +1,30 @@
 //! Linux-facing platform-profile architecture with no host filesystem access.
 //!
 //! This crate deliberately accepts bytes from an injected source. Phase 5B.3
-//! includes only the virtual, in-memory source below: it has no filesystem
-//! reader, no configurable path, no fallback to `/sys`, and no write API.
+//! includes the virtual, in-memory source below. Phase 5B.5A additionally has
+//! a test-only `openat2` source which accepts only a directory descriptor made
+//! by its tests. The production library has no filesystem reader, configurable
+//! path, host root, fallback to `/sys`, or write API.
 
 use legion_core::{
     ConfidenceLevel, PlatformProfileAdapter, PlatformProfileError, PlatformProfileInput,
     PlatformProfileRawInput, PlatformProfileReading, TelemetryArtifact, TelemetryProvenance,
 };
 use std::{collections::BTreeMap, fmt};
+
+#[cfg(test)]
+use rustix::{
+    fs::{CWD, FileType, Mode, OFlags, ResolveFlags, fstat, openat2},
+    io::{Errno, read},
+};
+#[cfg(test)]
+use std::{
+    fs::{self, File},
+    os::unix::fs::symlink,
+    path::{Path, PathBuf},
+    process,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 /// The only two entries this adapter is allowed to request. Their relative
 /// names are fixed in code, so callers cannot supply a path or traversal.
@@ -65,6 +81,9 @@ pub enum PlatformProfileSourceError {
         entry: PlatformProfileEntry,
         limit: usize,
     },
+    Openat2Unavailable {
+        entry: PlatformProfileEntry,
+    },
     UnsafeEntry {
         entry: PlatformProfileEntry,
         reason: String,
@@ -79,41 +98,40 @@ impl fmt::Display for PlatformProfileSourceError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Missing { entry } => {
-                write!(f, "missing simulated entry {}", entry.relative_name())
+                write!(f, "missing source entry {}", entry.relative_name())
             }
             Self::PermissionDenied { entry } => {
                 write!(
                     f,
-                    "permission denied for simulated entry {}",
+                    "permission denied for source entry {}",
                     entry.relative_name()
                 )
             }
             Self::InvalidUtf8 { entry } => {
-                write!(
-                    f,
-                    "invalid UTF-8 in simulated entry {}",
-                    entry.relative_name()
-                )
+                write!(f, "invalid UTF-8 in source entry {}", entry.relative_name())
             }
             Self::PartialRead { entry, bytes_read } => write!(
                 f,
-                "partial simulated read of {} ({bytes_read} bytes)",
+                "partial source read of {} ({bytes_read} bytes)",
                 entry.relative_name()
             ),
             Self::TooLarge { entry, limit } => write!(
                 f,
-                "simulated entry {} exceeds maximum size of {limit} bytes",
+                "source entry {} exceeds maximum size of {limit} bytes",
                 entry.relative_name()
             ),
-            Self::UnsafeEntry { entry, reason } => write!(
+            Self::Openat2Unavailable { entry } => write!(
                 f,
-                "unsafe simulated entry {}: {reason}",
+                "openat2 is unavailable while opening source entry {}",
                 entry.relative_name()
             ),
+            Self::UnsafeEntry { entry, reason } => {
+                write!(f, "unsafe source entry {}: {reason}", entry.relative_name())
+            }
             Self::ReadFailed { entry, reason } => {
                 write!(
                     f,
-                    "failed to read simulated entry {}: {reason}",
+                    "failed to read source entry {}: {reason}",
                     entry.relative_name()
                 )
             }
@@ -352,12 +370,233 @@ impl PlatformProfileByteSource for SimulatedPlatformProfileTree {
 
 impl private::Sealed for SimulatedPlatformProfileTree {}
 
+// This source is deliberately compiled only into this crate's test binary.
+// Its constructor takes an already-open directory descriptor rather than a
+// path. Consequently, production code and the CLI cannot point it at the host
+// filesystem. The test helper below creates that descriptor solely for a fresh
+// temporary tree under the test process' temporary directory.
+#[cfg(test)]
+struct Openat2TestPlatformProfileSource {
+    root: File,
+    root_label: String,
+}
+
+#[cfg(test)]
+impl Openat2TestPlatformProfileSource {
+    const MAXIMUM_SIZE: usize = 4096;
+    const MAX_INTERRUPTED_READS: usize = 2;
+
+    fn from_test_directory(root: File, root_label: impl Into<String>) -> Self {
+        Self {
+            root,
+            root_label: root_label.into(),
+        }
+    }
+
+    fn open_entry(&self, entry: PlatformProfileEntry) -> Result<File, PlatformProfileSourceError> {
+        // All resolution happens relative to `root`. The literal supplied to
+        // openat2 originates only from PlatformProfileEntry, never from CLI,
+        // environment, configuration, or a caller-supplied path.
+        openat2(
+            &self.root,
+            entry.relative_name(),
+            OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW | OFlags::NONBLOCK,
+            Mode::empty(),
+            ResolveFlags::BENEATH | ResolveFlags::NO_MAGICLINKS | ResolveFlags::NO_SYMLINKS,
+        )
+        .map(File::from)
+        .map_err(|error| map_openat2_error(entry, error))
+        .and_then(|file| {
+            let stat = fstat(&file).map_err(|error| PlatformProfileSourceError::ReadFailed {
+                entry,
+                reason: format!("could not inspect opened entry: {error}"),
+            })?;
+            if FileType::from_raw_mode(stat.st_mode) != FileType::RegularFile {
+                return Err(PlatformProfileSourceError::UnsafeEntry {
+                    entry,
+                    reason: "opened entry is not a regular test fixture file".to_owned(),
+                });
+            }
+            Ok(file)
+        })
+    }
+
+    fn read_complete(
+        &self,
+        entry: PlatformProfileEntry,
+    ) -> Result<PlatformProfileSourceRead, PlatformProfileSourceError> {
+        let file = self.open_entry(entry)?;
+        let mut bytes = Vec::with_capacity(512);
+        let mut interrupted_reads = 0;
+
+        loop {
+            let mut chunk = [0_u8; 512];
+            // Ask for at most one byte beyond the cap. This detects excess
+            // content while never retaining more than 4097 bytes.
+            let requested = (Self::MAXIMUM_SIZE + 1 - bytes.len()).min(chunk.len());
+            match read(&file, &mut chunk[..requested]) {
+                Ok(0) => return Ok(PlatformProfileSourceRead::Complete(bytes)),
+                Ok(count) => {
+                    bytes.extend_from_slice(&chunk[..count]);
+                    if bytes.len() > Self::MAXIMUM_SIZE {
+                        return Err(PlatformProfileSourceError::TooLarge {
+                            entry,
+                            limit: Self::MAXIMUM_SIZE,
+                        });
+                    }
+                }
+                Err(Errno::INTR) if interrupted_reads < Self::MAX_INTERRUPTED_READS => {
+                    interrupted_reads += 1;
+                }
+                Err(Errno::INTR) => {
+                    return Err(PlatformProfileSourceError::ReadFailed {
+                        entry,
+                        reason: "interrupted reads exceeded the retry limit".to_owned(),
+                    });
+                }
+                Err(error) if bytes.is_empty() => {
+                    return Err(PlatformProfileSourceError::ReadFailed {
+                        entry,
+                        reason: format!("read failed before EOF: {error}"),
+                    });
+                }
+                Err(_) => {
+                    return Ok(PlatformProfileSourceRead::Partial {
+                        bytes_read: bytes.len(),
+                    });
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+impl PlatformProfileByteSource for Openat2TestPlatformProfileSource {
+    fn read(
+        &self,
+        entry: PlatformProfileEntry,
+        maximum_size: usize,
+    ) -> Result<PlatformProfileSourceRead, PlatformProfileSourceError> {
+        // The isolated provider does not permit a caller to enlarge its cap.
+        // Keeping the cap exact makes the 4096-byte policy independently
+        // enforceable even if a generic reader is misconfigured in a test.
+        if maximum_size != Self::MAXIMUM_SIZE {
+            return Err(PlatformProfileSourceError::ReadFailed {
+                entry,
+                reason: format!(
+                    "isolated openat2 source requires a {}-byte limit",
+                    Self::MAXIMUM_SIZE
+                ),
+            });
+        }
+        self.read_complete(entry)
+    }
+
+    fn simulated_root_label(&self) -> &str {
+        &self.root_label
+    }
+}
+
+#[cfg(test)]
+impl private::Sealed for Openat2TestPlatformProfileSource {}
+
+#[cfg(test)]
+fn map_openat2_error(entry: PlatformProfileEntry, error: Errno) -> PlatformProfileSourceError {
+    match error {
+        Errno::NOENT => PlatformProfileSourceError::Missing { entry },
+        Errno::ACCESS | Errno::PERM => PlatformProfileSourceError::PermissionDenied { entry },
+        Errno::NOSYS => PlatformProfileSourceError::Openat2Unavailable { entry },
+        // `ELOOP`, `EXDEV`, and `EAGAIN` mean either a prohibited link or an
+        // inability to prove the requested resolution stayed confined. There
+        // is intentionally no open/openat fallback or retry through a path.
+        Errno::LOOP | Errno::XDEV | Errno::AGAIN => PlatformProfileSourceError::UnsafeEntry {
+            entry,
+            reason: format!("openat2 could not guarantee confined resolution: {error}"),
+        },
+        _ => PlatformProfileSourceError::ReadFailed {
+            entry,
+            reason: format!("openat2 failed: {error}"),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use legion_core::{PlatformProfileVocabulary, TelemetryState};
 
     const MAXIMUM_SIZE: usize = 128;
+    const OPENAT2_MAXIMUM_SIZE: usize = Openat2TestPlatformProfileSource::MAXIMUM_SIZE;
+    static NEXT_TEMPORARY_TREE: AtomicUsize = AtomicUsize::new(0);
+
+    struct TemporaryTestTree {
+        root: PathBuf,
+    }
+
+    impl TemporaryTestTree {
+        fn new() -> Self {
+            // The fixture location is fixed rather than taken from TMPDIR or
+            // another environment variable. Each test still creates its own
+            // exact child directory below this conventional temporary root.
+            let base = Path::new("/tmp");
+            for _ in 0..32 {
+                let sequence = NEXT_TEMPORARY_TREE.fetch_add(1, Ordering::Relaxed);
+                let root = base.join(format!(
+                    "legion-linux-openat2-test-{}-{sequence}",
+                    process::id()
+                ));
+                match fs::create_dir(&root) {
+                    Ok(()) => return Self { root },
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                    Err(error) => panic!("could not create isolated test root: {error}"),
+                }
+            }
+            panic!("could not allocate an isolated temporary test root")
+        }
+
+        fn path(&self) -> &Path {
+            &self.root
+        }
+
+        fn entry_path(&self, entry: PlatformProfileEntry) -> PathBuf {
+            self.root.join(entry.relative_name())
+        }
+
+        fn write(&self, entry: PlatformProfileEntry, contents: &[u8]) {
+            fs::write(self.entry_path(entry), contents)
+                .expect("test fixture writes only below its isolated root");
+        }
+
+        fn source(&self) -> Openat2TestPlatformProfileSource {
+            // Test setup also uses openat2, refusing symlinks before handing
+            // the resulting directory descriptor to the source. The source
+            // itself never receives a path.
+            let root = openat2(
+                CWD,
+                self.path(),
+                OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW | OFlags::DIRECTORY,
+                Mode::empty(),
+                ResolveFlags::NO_MAGICLINKS | ResolveFlags::NO_SYMLINKS,
+            )
+            .expect("test root must be an isolated non-symlink directory");
+            Openat2TestPlatformProfileSource::from_test_directory(
+                File::from(root),
+                "temporary-openat2-test-tree",
+            )
+        }
+    }
+
+    impl Drop for TemporaryTestTree {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    fn openat2_reader(
+        tree: &TemporaryTestTree,
+    ) -> LinuxPlatformProfileReader<Openat2TestPlatformProfileSource> {
+        LinuxPlatformProfileReader::new(tree.source(), OPENAT2_MAXIMUM_SIZE)
+    }
 
     fn tree(active: SimulatedEntry, choices: SimulatedEntry) -> SimulatedPlatformProfileTree {
         SimulatedPlatformProfileTree::new("temporary-test-tree")
@@ -367,6 +606,165 @@ mod tests {
 
     fn regular(value: &str) -> SimulatedEntry {
         SimulatedEntry::Regular(value.as_bytes().to_vec())
+    }
+
+    #[test]
+    fn openat2_source_reads_fixed_entries_until_normal_eof() {
+        let tree = TemporaryTestTree::new();
+        tree.write(PlatformProfileEntry::Active, b"performance\n");
+        tree.write(
+            PlatformProfileEntry::Choices,
+            b"low-power balanced performance max-power custom\n",
+        );
+
+        let result = openat2_reader(&tree).read().unwrap();
+        assert_eq!(
+            result.profile.normalized.active.unwrap().name,
+            "performance"
+        );
+        assert_eq!(
+            result.profile.provenance.artifact,
+            TelemetryArtifact::StaticSimulation
+        );
+        assert!(matches!(
+            result.origin,
+            LinuxPlatformProfileOrigin::StaticSimulation { .. }
+        ));
+    }
+
+    #[test]
+    fn openat2_source_rejects_missing_oversized_and_invalid_utf8_entries() {
+        let missing = TemporaryTestTree::new();
+        missing.write(PlatformProfileEntry::Choices, b"performance\n");
+        assert!(matches!(
+            openat2_reader(&missing).read(),
+            Err(LinuxPlatformProfileError::Source(
+                PlatformProfileSourceError::Missing {
+                    entry: PlatformProfileEntry::Active
+                }
+            ))
+        ));
+
+        let oversized = TemporaryTestTree::new();
+        oversized.write(
+            PlatformProfileEntry::Active,
+            &vec![b'p'; OPENAT2_MAXIMUM_SIZE + 1],
+        );
+        oversized.write(PlatformProfileEntry::Choices, b"performance\n");
+        assert!(matches!(
+            openat2_reader(&oversized).read(),
+            Err(LinuxPlatformProfileError::Source(
+                PlatformProfileSourceError::TooLarge {
+                    entry: PlatformProfileEntry::Active,
+                    limit: OPENAT2_MAXIMUM_SIZE,
+                }
+            ))
+        ));
+
+        let invalid_utf8 = TemporaryTestTree::new();
+        invalid_utf8.write(PlatformProfileEntry::Active, &[0xff]);
+        invalid_utf8.write(PlatformProfileEntry::Choices, b"performance\n");
+        assert!(matches!(
+            openat2_reader(&invalid_utf8).read(),
+            Err(LinuxPlatformProfileError::Source(
+                PlatformProfileSourceError::InvalidUtf8 {
+                    entry: PlatformProfileEntry::Active
+                }
+            ))
+        ));
+    }
+
+    #[test]
+    fn openat2_source_rejects_symbolic_links_and_keeps_a_dirfd_after_substitution() {
+        let symlink_tree = TemporaryTestTree::new();
+        symlink_tree.write(PlatformProfileEntry::Choices, b"performance\n");
+        symlink_tree.write(PlatformProfileEntry::Active, b"balanced\n");
+        fs::remove_file(symlink_tree.entry_path(PlatformProfileEntry::Active))
+            .expect("remove only the temporary fixture entry");
+        symlink(
+            symlink_tree.entry_path(PlatformProfileEntry::Choices),
+            symlink_tree.entry_path(PlatformProfileEntry::Active),
+        )
+        .expect("fixture symlink is created only inside its temporary tree");
+        assert!(matches!(
+            openat2_reader(&symlink_tree).read(),
+            Err(LinuxPlatformProfileError::Source(
+                PlatformProfileSourceError::UnsafeEntry {
+                    entry: PlatformProfileEntry::Active,
+                    ..
+                }
+            ))
+        ));
+
+        let tree = TemporaryTestTree::new();
+        tree.write(PlatformProfileEntry::Active, b"performance\n");
+        tree.write(PlatformProfileEntry::Choices, b"performance balanced\n");
+        let source = tree.source();
+        let detached_root = tree.path().with_extension("detached");
+        fs::rename(tree.path(), &detached_root).expect("rename only the test root");
+        fs::create_dir(tree.path()).expect("recreate only the test root name");
+        fs::write(
+            tree.entry_path(PlatformProfileEntry::Active),
+            b"malicious-replacement\n",
+        )
+        .expect("write only the replacement test root");
+        fs::write(
+            tree.entry_path(PlatformProfileEntry::Choices),
+            b"malicious-replacement\n",
+        )
+        .expect("write only the replacement test root");
+
+        let reading = LinuxPlatformProfileReader::new(source, OPENAT2_MAXIMUM_SIZE)
+            .read()
+            .unwrap();
+        assert_eq!(
+            reading.profile.normalized.active.unwrap().name,
+            "performance"
+        );
+        fs::remove_dir_all(detached_root).expect("remove only the detached test root");
+    }
+
+    #[test]
+    fn openat2_source_fails_closed_for_unavailable_or_unconfined_opening() {
+        assert!(matches!(
+            map_openat2_error(PlatformProfileEntry::Active, Errno::NOSYS),
+            PlatformProfileSourceError::Openat2Unavailable {
+                entry: PlatformProfileEntry::Active
+            }
+        ));
+        assert!(matches!(
+            map_openat2_error(PlatformProfileEntry::Choices, Errno::ACCESS),
+            PlatformProfileSourceError::PermissionDenied {
+                entry: PlatformProfileEntry::Choices
+            }
+        ));
+        assert!(matches!(
+            map_openat2_error(PlatformProfileEntry::Choices, Errno::PERM),
+            PlatformProfileSourceError::PermissionDenied {
+                entry: PlatformProfileEntry::Choices
+            }
+        ));
+        assert!(matches!(
+            map_openat2_error(PlatformProfileEntry::Active, Errno::LOOP),
+            PlatformProfileSourceError::UnsafeEntry {
+                entry: PlatformProfileEntry::Active,
+                ..
+            }
+        ));
+        assert!(matches!(
+            map_openat2_error(PlatformProfileEntry::Active, Errno::XDEV),
+            PlatformProfileSourceError::UnsafeEntry {
+                entry: PlatformProfileEntry::Active,
+                ..
+            }
+        ));
+        assert!(matches!(
+            map_openat2_error(PlatformProfileEntry::Active, Errno::AGAIN),
+            PlatformProfileSourceError::UnsafeEntry {
+                entry: PlatformProfileEntry::Active,
+                ..
+            }
+        ));
     }
 
     #[test]

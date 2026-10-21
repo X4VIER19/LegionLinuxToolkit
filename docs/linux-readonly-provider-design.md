@@ -151,6 +151,34 @@ es `SimulatedPlatformProfileTree`. Al autorizar un proveedor real:
 Esto conserva las pruebas de fixtures y evita que un consumidor externo
 implemente por accidente un lector de host.
 
+## Implementación aislada de prueba (Fase 5B.5A)
+
+La Fase 5B.5A materializa únicamente la parte de pruebas de este diseño en
+`crates/legion-linux/src/lib.rs`, bajo `#[cfg(test)]`. No se incorpora un
+proveedor de producción ni un constructor que acepte rutas del host. La fuente
+de prueba recibe un descriptor de directorio que crea el propio test para un
+árbol temporal nuevo; la CLI y las compilaciones normales no incluyen ese
+tipo.
+
+Cada atributo se abre con la API segura `rustix::fs::openat2`, con
+`O_RDONLY`, `O_CLOEXEC`, `O_NOFOLLOW` y `O_NONBLOCK`, y con
+`RESOLVE_BENEATH | RESOLVE_NO_MAGICLINKS | RESOLVE_NO_SYMLINKS`. Solo se
+solicitan los literales internos `platform_profile` y
+`platform_profile_choices`. La implementación rechaza `ENOSYS` sin fallback,
+errores de confinamiento, enlaces simbólicos y objetos que no sean archivos
+regulares de fixture. Lee como máximo 4097 bytes para detectar y rechazar una
+entrada que exceda el límite publicado de 4096; una lectura normal termina
+exclusivamente al recibir EOF.
+
+La dependencia directa es `rustix 1.1.5` con la característica `fs`. Su
+manifiesto declara `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; sus
+dependencias nuevas resueltas (`bitflags 2.13.2`, `errno 0.3.14`,
+`libc 0.2.191`, `linux-raw-sys 0.12.1`, `windows-link 0.2.1` y
+`windows-sys 0.61.2`) permiten MIT o Apache-2.0. No se identificó una
+incompatibilidad con `MIT OR Apache-2.0` del proyecto. Esta comprobación se
+limita a los campos `license` de los manifiestos resueltos; no sustituye una
+revisión legal de textos de licencia o avisos de distribución.
+
 ## Pruebas necesarias antes de activar una lectura real
 
 | Prueba | Fixtures aisladas | Sysfs real con autorización independiente |
