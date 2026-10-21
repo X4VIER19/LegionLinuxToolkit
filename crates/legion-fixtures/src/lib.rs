@@ -4,11 +4,12 @@ use legion_core::{
     CapabilityRecord, CompatibilityProfile, CompatibilityRegistry, CompatibilityStatus,
     ConfidenceLevel, DeviceDescriptor, DeviceIdentity, DeviceQuery, EnergyProfile, EnergyProfiles,
     Evidence, EvidenceKind, FanInterpretation, FanTelemetry, FanValidation, FrequencyReading,
-    ObservationPlatform, PowerReading, PowerReadingKind, TelemetryArtifact, TelemetryError,
-    TelemetryProvenance, TelemetrySnapshot, TelemetryState, TelemetryUnit, TelemetryValue,
-    TemperatureReading, ValueClassification, WmiArgument, WmiArtifact, WmiKnowledge,
-    WmiMethodMetadata, WmiObservationPlatform, WmiOperation, WmiProvenance, WmiRequest,
-    WmiResponse, WmiTransport, WmiTransportError,
+    ObservationPlatform, PlatformProfileAdapter, PlatformProfileError, PlatformProfileInput,
+    PlatformProfileRawInput, PlatformProfileReading, PowerReading, PowerReadingKind,
+    TelemetryArtifact, TelemetryError, TelemetryProvenance, TelemetrySnapshot, TelemetryState,
+    TelemetryUnit, TelemetryValue, TemperatureReading, ValueClassification, WmiArgument,
+    WmiArtifact, WmiKnowledge, WmiMethodMetadata, WmiObservationPlatform, WmiOperation,
+    WmiProvenance, WmiRequest, WmiResponse, WmiTransport, WmiTransportError,
 };
 
 pub const VALID: &str = include_str!("../data/valid.snapshot");
@@ -119,6 +120,66 @@ pub fn telemetry_scenario(name: &str) -> Option<TelemetryScenario> {
         "read-error" => Some(TelemetryScenario::ReadError),
         _ => None,
     }
+}
+
+/// Named, embedded text scenarios for the platform-profile parser. They are
+/// not files and cannot select a host path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlatformProfileScenario {
+    Valid,
+    ActiveOnly,
+    MissingActive,
+    EmptyActive,
+    EmptyChoices,
+    Unknown,
+    Duplicate,
+    Inconsistent,
+    Malformed,
+}
+
+pub fn platform_profile_scenario(name: &str) -> Option<PlatformProfileScenario> {
+    match name {
+        "valid" => Some(PlatformProfileScenario::Valid),
+        "active-only" => Some(PlatformProfileScenario::ActiveOnly),
+        "missing-active" => Some(PlatformProfileScenario::MissingActive),
+        "empty-active" => Some(PlatformProfileScenario::EmptyActive),
+        "empty-choices" => Some(PlatformProfileScenario::EmptyChoices),
+        "unknown" => Some(PlatformProfileScenario::Unknown),
+        "duplicate" => Some(PlatformProfileScenario::Duplicate),
+        "inconsistent" => Some(PlatformProfileScenario::Inconsistent),
+        "malformed" => Some(PlatformProfileScenario::Malformed),
+        _ => None,
+    }
+}
+
+/// Parses only static strings created below. No code in this crate opens a
+/// file, directory, device, or firmware interface.
+pub fn simulated_platform_profile(
+    scenario: PlatformProfileScenario,
+) -> Result<PlatformProfileReading, PlatformProfileError> {
+    let (active, choices) = match scenario {
+        PlatformProfileScenario::Valid => (
+            Some("balanced\n"),
+            Some("low-power balanced performance max-power custom\n"),
+        ),
+        PlatformProfileScenario::ActiveOnly => (Some("balanced\n"), None),
+        PlatformProfileScenario::MissingActive => (None, Some("low-power balanced performance\n")),
+        PlatformProfileScenario::EmptyActive => (Some("\n"), Some("balanced performance\n")),
+        PlatformProfileScenario::EmptyChoices => (Some("balanced\n"), Some("\n")),
+        PlatformProfileScenario::Unknown => {
+            (Some("vendor-turbo\n"), Some("balanced vendor-turbo\n"))
+        }
+        PlatformProfileScenario::Duplicate => (Some("balanced\n"), Some("balanced balanced\n")),
+        PlatformProfileScenario::Inconsistent => (Some("balanced\n"), Some("performance\n")),
+        PlatformProfileScenario::Malformed => (Some("balanced profile\n"), None),
+    };
+    PlatformProfileAdapter.parse(PlatformProfileInput {
+        raw: PlatformProfileRawInput {
+            active: active.map(str::to_owned),
+            choices: choices.map(str::to_owned),
+        },
+        provenance: simulated_telemetry_provenance("legion-fixtures::platform_profile"),
+    })
 }
 
 /// Creates static demonstration data. Values are intentionally not readings
@@ -558,5 +619,46 @@ mod tests {
         assert!(snapshot.fans.iter().all(|fan| {
             fan.reported_speed.provenance.artifact == TelemetryArtifact::StaticSimulation
         }));
+    }
+
+    #[test]
+    fn platform_profile_fixture_preserves_simulated_raw_and_normalized_data() {
+        let reading = simulated_platform_profile(PlatformProfileScenario::Valid).unwrap();
+        assert_eq!(reading.raw.active.as_deref(), Some("balanced\n"));
+        assert_eq!(reading.normalized.active.unwrap().name, "balanced");
+        assert_eq!(
+            reading.provenance.artifact,
+            TelemetryArtifact::StaticSimulation
+        );
+    }
+
+    #[test]
+    fn platform_profile_fixture_covers_absent_and_unknown_data() {
+        let missing = simulated_platform_profile(PlatformProfileScenario::MissingActive).unwrap();
+        assert_eq!(missing.state, TelemetryState::Unavailable);
+        assert_eq!(missing.normalized.active, None);
+
+        let unknown = simulated_platform_profile(PlatformProfileScenario::Unknown).unwrap();
+        assert_eq!(unknown.state, TelemetryState::Unvalidated);
+    }
+
+    #[test]
+    fn platform_profile_fixture_rejects_empty_duplicate_and_inconsistent_text() {
+        for scenario in [
+            PlatformProfileScenario::EmptyActive,
+            PlatformProfileScenario::EmptyChoices,
+            PlatformProfileScenario::Duplicate,
+            PlatformProfileScenario::Inconsistent,
+            PlatformProfileScenario::Malformed,
+        ] {
+            assert!(simulated_platform_profile(scenario).is_err());
+        }
+    }
+
+    #[test]
+    fn platform_profile_scenarios_reject_host_path_names() {
+        assert!(platform_profile_scenario("/sys").is_none());
+        assert!(platform_profile_scenario("/proc").is_none());
+        assert!(platform_profile_scenario("/dev").is_none());
     }
 }

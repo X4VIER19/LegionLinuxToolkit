@@ -1,6 +1,6 @@
 use legion_core::{
-    MatchResult, Snapshot, TelemetrySnapshot, TelemetryValue, WmiResponse, WmiTransportError,
-    parse_snapshot,
+    MatchResult, PlatformProfileReading, Snapshot, TelemetrySnapshot, TelemetryValue, WmiResponse,
+    WmiTransportError, parse_snapshot,
 };
 use serde::Serialize;
 use std::{env, process::ExitCode};
@@ -53,9 +53,8 @@ fn run(args: Vec<String>) -> Result<String, String> {
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
-            "summary" | "profiles" | "attributes" | "compatibility" | "telemetry" | "wmi" => {
-                view = &args[index]
-            }
+            "summary" | "profiles" | "attributes" | "compatibility" | "telemetry" | "wmi"
+            | "platform-profile" => view = &args[index],
             "--format" => {
                 index += 1;
                 format = args.get(index).ok_or("--format requires text or json")?;
@@ -73,7 +72,7 @@ fn run(args: Vec<String>) -> Result<String, String> {
                 scenario = args.get(index).ok_or("--scenario requires a fixture name")?;
             }
             "--help" | "-h" => {
-                return Ok("Usage: legion-cli [summary|profiles|attributes] [--format text|json] [--fixture valid|missing|malformed]\n       legion-cli compatibility [--device known|unknown|incomplete] [--format text|json]\n       legion-cli telemetry [--scenario valid|absent|unvalidated|inconsistent|read-error] [--format text|json]\n       legion-cli wmi [--scenario valid|unavailable|inconsistent-buffer|unsupported] [--format text|json]\nAll data is embedded and simulated.".into())
+                return Ok("Usage: legion-cli [summary|profiles|attributes] [--format text|json] [--fixture valid|missing|malformed]\n       legion-cli compatibility [--device known|unknown|incomplete] [--format text|json]\n       legion-cli telemetry [--scenario valid|absent|unvalidated|inconsistent|read-error] [--format text|json]\n       legion-cli platform-profile [--scenario valid|active-only|missing-active|empty-active|empty-choices|unknown|duplicate|inconsistent|malformed] [--format text|json]\n       legion-cli wmi [--scenario valid|unavailable|inconsistent-buffer|unsupported] [--format text|json]\nAll data is embedded and simulated.".into())
             }
             other => return Err(format!("unsupported argument: {other}")),
         }
@@ -90,6 +89,9 @@ fn run(args: Vec<String>) -> Result<String, String> {
     }
     if view == "telemetry" {
         return telemetry(scenario, format);
+    }
+    if view == "platform-profile" {
+        return platform_profile(scenario, format);
     }
     let input = legion_fixtures::named(fixture)
         .ok_or_else(|| format!("unknown simulated fixture: {fixture}"))?;
@@ -116,6 +118,18 @@ fn telemetry(scenario: &str, format: &str) -> Result<String, String> {
     match format {
         "json" => json(&snapshot),
         "text" => Ok(text_telemetry(&snapshot)),
+        _ => unreachable!(),
+    }
+}
+
+fn platform_profile(scenario: &str, format: &str) -> Result<String, String> {
+    let scenario = legion_fixtures::platform_profile_scenario(scenario)
+        .ok_or_else(|| format!("unknown simulated platform-profile scenario: {scenario}"))?;
+    let reading =
+        legion_fixtures::simulated_platform_profile(scenario).map_err(|error| error.to_string())?;
+    match format {
+        "json" => json(&reading),
+        "text" => Ok(text_platform_profile(&reading)),
         _ => unreachable!(),
     }
 }
@@ -254,6 +268,35 @@ fn text_telemetry(snapshot: &TelemetrySnapshot) -> String {
         frequencies,
         power,
         fans,
+    )
+}
+
+fn text_platform_profile(reading: &PlatformProfileReading) -> String {
+    let raw_active = reading.raw.active.as_deref().unwrap_or("<absent>");
+    let raw_choices = reading.raw.choices.as_deref().unwrap_or("<absent>");
+    let active = reading
+        .normalized
+        .active
+        .as_ref()
+        .map(|profile| format!("{} ({:?})", profile.name, profile.vocabulary))
+        .unwrap_or_else(|| "<absent>".to_owned());
+    let choices = reading
+        .normalized
+        .available
+        .as_ref()
+        .map(|profiles| {
+            profiles
+                .iter()
+                .map(|profile| format!("{} ({:?})", profile.name, profile.vocabulary))
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_else(|| "<absent>".to_owned());
+    format!(
+        "Platform-profile simulation only\nRaw active: {raw_active:?}\nRaw choices: {raw_choices:?}\nNormalized active: {active}\nNormalized choices: {choices}\nState: {}\nProvenance: {} ({})\nNo host path, firmware, or energy profile was accessed or changed.",
+        reading.state.as_str(),
+        reading.provenance.source,
+        reading.provenance.confidence.as_str(),
     )
 }
 
@@ -472,5 +515,50 @@ mod tests {
 
         let path = run(vec!["telemetry".into(), "--scenario".into(), "/sys".into()]).unwrap_err();
         assert!(path.contains("unknown simulated telemetry scenario"));
+    }
+
+    #[test]
+    fn renders_raw_and_normalized_simulated_platform_profile_as_json() {
+        let output = run(vec![
+            "platform-profile".into(),
+            "--format".into(),
+            "json".into(),
+        ])
+        .unwrap();
+        let decoded: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(decoded["source"], "simulated");
+        assert_eq!(decoded["data"]["raw"]["active"], "balanced\n");
+        assert_eq!(decoded["data"]["normalized"]["active"]["name"], "balanced");
+        assert_eq!(
+            decoded["data"]["provenance"]["artifact"],
+            "static-simulation"
+        );
+    }
+
+    #[test]
+    fn renders_absent_and_rejects_invalid_platform_profile_scenarios() {
+        let absent = run(vec![
+            "platform-profile".into(),
+            "--scenario".into(),
+            "missing-active".into(),
+        ])
+        .unwrap();
+        assert!(absent.contains("State: unavailable"));
+
+        let invalid = run(vec![
+            "platform-profile".into(),
+            "--scenario".into(),
+            "duplicate".into(),
+        ])
+        .unwrap_err();
+        assert!(invalid.contains("duplicate simulated platform-profile choice"));
+
+        let path = run(vec![
+            "platform-profile".into(),
+            "--scenario".into(),
+            "/sys".into(),
+        ])
+        .unwrap_err();
+        assert!(path.contains("unknown simulated platform-profile scenario"));
     }
 }

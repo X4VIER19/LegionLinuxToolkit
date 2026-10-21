@@ -6,12 +6,18 @@ use serde::Serialize;
 use std::fmt;
 
 mod compatibility;
+mod platform_profile;
 mod telemetry;
 mod wmi;
 
 pub use compatibility::{
     CapabilityRecord, CompatibilityProfile, CompatibilityRegistry, CompatibilityStatus,
     DeviceDescriptor, DeviceQuery, Evidence, EvidenceKind, MatchResult, ObservationPlatform,
+};
+pub use platform_profile::{
+    NormalizedPlatformProfile, NormalizedPlatformProfiles, PlatformProfileAdapter,
+    PlatformProfileError, PlatformProfileInput, PlatformProfileRawInput, PlatformProfileReading,
+    PlatformProfileVocabulary,
 };
 pub use telemetry::{
     ConfidenceLevel, EnergyProfile, EnergyProfiles, FanTelemetry, FrequencyReading, PowerReading,
