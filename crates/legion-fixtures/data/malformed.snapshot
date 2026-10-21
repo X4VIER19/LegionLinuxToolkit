@@ -1,0 +1,14 @@
+[identity]
+model=Lenovo Legion Slim 5 16ARP9
+machine_type=83EX
+bios_version=NUCN15WW
+board_name=LNVNB161216
+[profiles]
+active=balanced
+available=low-power,balanced
+[attributes]
+cpu_temp=not-a-number
+[fans]
+yogafan=error,unvalidated,read-error
+[capabilities]
+profile.read=validated-read,simulated-platform-profile

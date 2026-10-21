@@ -13,8 +13,8 @@ concreta del 83EX/`NUCN15WW`.
 
 - Aprobación explícita de esta documentación inicial; no equivale a autorización
   para invocar firmware ni acceder a hardware real.
-- Decidir lenguaje, formato de distribución y licencia del proyecto antes de
-  incorporar código o dependencias.
+- Rust es el lenguaje principal y la licencia es dual MIT OR Apache-2.0.
+  Falta decidir el formato de distribución antes de publicar paquetes.
 - Definir y revisar el contrato de entrada/salida del CLI y las fixtures sysfs
   simuladas, incluyendo casos de ausencia, permisos y datos malformados.
 - Mantener los adaptadores reales fuera de la configuración de prueba y de CI.
@@ -24,9 +24,10 @@ concreta del 83EX/`NUCN15WW`.
 
 ## Fase 1 — Inventario pasivo de CLI
 
-Crear un CLI sobre una fuente de datos simulada de sysfs. Debe emitir JSON
-estable y una vista humana. Las pruebas automatizadas solo usan fixtures de
-árboles sysfs falsos; no hay acceso a hardware, firmware ni rutas reales en CI.
+Crear un workspace Rust con `legion-core`, `legion-cli` y `legion-fixtures`.
+El CLI debe emitir JSON estable y una vista humana desde snapshots embebidos.
+Las pruebas automatizadas solo usan datos simulados; no hay acceso a hardware,
+firmware ni rutas reales en CI.
 
 **Criterio de salida:** cada campo indica su fuente, unidad y si es medición o
 límite. Los fallos de lectura no se convierten en ceros. La configuración de

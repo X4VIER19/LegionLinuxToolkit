@@ -73,6 +73,13 @@ Adaptadores de solo lectura ── sysfs / hwmon / WMI (opt-in)
 Kernel y firmware
 ```
 
+## Fase 1: Rust y datos simulados
+
+El workspace contiene `legion-core` (modelos y parser puro), `legion-cli`
+(salida legible y JSON) y `legion-fixtures` (snapshots embebidos). No usa
+dependencias externas ni lee rutas del host; las entradas del CLI son fixtures
+incluidas y las pruebas rechazan nombres de rutas como `/sys`.
+
 Cada adaptador devuelve datos tipados junto con procedencia, unidad, marca de
 tiempo y nivel de confianza. Las operaciones de escritura serán un componente
 independiente, ausente del primer prototipo y bloqueado por una política de
@@ -93,7 +100,10 @@ están separados de las hipótesis en [docs/known-interfaces.md](docs/known-inte
 
 ## Licencias y referencias
 
-Este repositorio no incorpora código de proyectos de terceros en esta fase.
+LegionLinuxToolkit se distribuye bajo licencia dual
+[MIT](LICENSE-MIT) o [Apache-2.0](LICENSE-APACHE), a elección de quien reciba
+el software. Este repositorio no incorpora código de proyectos de terceros en
+esta fase.
 Las implementaciones externas se estudian como referencias de arquitectura y
 compatibilidad; cualquier reutilización futura requiere comprobar su licencia,
 atribución y compatibilidad antes de incluirla.
