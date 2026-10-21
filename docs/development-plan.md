@@ -85,7 +85,16 @@ sin atribuir significado de control a los valores hasta corroborarlo. Las
 comparaciones de Windows comienzan con consultas de solo lectura; un cambio
 temporal desde LLT requiere autorización independiente.
 
-## Fase 5 — Telemetría y UX
+## Fase 5A — Telemetría y perfiles simulados
+
+La Fase 5A define los modelos independientes de plataforma para temperaturas,
+frecuencias, potencia, ventiladores y perfiles, junto con fixtures embebidas.
+Cada valor debe conservar unidad, clasificación, estado, procedencia y
+confianza. Las pruebas solo aceptan escenarios estáticos; no leen sensores ni
+adaptadores reales. La documentación de esta fase está en
+[telemetría y perfiles simulados](telemetry-simulation.md).
+
+## Fase 5B — Telemetría y UX reales
 
 Solo cuando exista una fuente de RPM validada, presentar series temporales con
 procedencia y avisos de calidad. La posibilidad de editar curvas queda fuera de

@@ -104,6 +104,7 @@ están separados de las hipótesis en [docs/known-interfaces.md](docs/known-inte
 - [Transporte WMI simulado](docs/wmi-transport-simulation.md)
 - [Investigación pasiva de WMI](docs/wmi-passive-research.md)
 - [Contrato técnico de `Fan_Get_Table`](docs/fan-get-table-contract-research.md)
+- [Telemetría y perfiles simulados](docs/telemetry-simulation.md)
 - [Arquitectura modular](docs/architecture.md)
 - [Plan incremental](docs/development-plan.md)
 - [Fuentes y licencias](docs/research-sources.md)

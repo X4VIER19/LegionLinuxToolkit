@@ -2,9 +2,13 @@
 
 use legion_core::{
     CapabilityRecord, CompatibilityProfile, CompatibilityRegistry, CompatibilityStatus,
-    DeviceDescriptor, DeviceQuery, Evidence, EvidenceKind, ObservationPlatform, WmiArgument,
-    WmiArtifact, WmiKnowledge, WmiMethodMetadata, WmiObservationPlatform, WmiOperation,
-    WmiProvenance, WmiRequest, WmiResponse, WmiTransport, WmiTransportError,
+    ConfidenceLevel, DeviceDescriptor, DeviceIdentity, DeviceQuery, EnergyProfile, EnergyProfiles,
+    Evidence, EvidenceKind, FanInterpretation, FanTelemetry, FanValidation, FrequencyReading,
+    ObservationPlatform, PowerReading, PowerReadingKind, TelemetryArtifact, TelemetryError,
+    TelemetryProvenance, TelemetrySnapshot, TelemetryState, TelemetryUnit, TelemetryValue,
+    TemperatureReading, ValueClassification, WmiArgument, WmiArtifact, WmiKnowledge,
+    WmiMethodMetadata, WmiObservationPlatform, WmiOperation, WmiProvenance, WmiRequest,
+    WmiResponse, WmiTransport, WmiTransportError,
 };
 
 pub const VALID: &str = include_str!("../data/valid.snapshot");
@@ -93,6 +97,176 @@ pub fn compatibility_query(name: &str) -> Option<DeviceQuery> {
             ..DeviceQuery::default()
         }),
         _ => None,
+    }
+}
+
+/// Named in-memory telemetry scenarios. They never open files or host paths.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TelemetryScenario {
+    Valid,
+    Absent,
+    Unvalidated,
+    Inconsistent,
+    ReadError,
+}
+
+pub fn telemetry_scenario(name: &str) -> Option<TelemetryScenario> {
+    match name {
+        "valid" => Some(TelemetryScenario::Valid),
+        "absent" => Some(TelemetryScenario::Absent),
+        "unvalidated" => Some(TelemetryScenario::Unvalidated),
+        "inconsistent" => Some(TelemetryScenario::Inconsistent),
+        "read-error" => Some(TelemetryScenario::ReadError),
+        _ => None,
+    }
+}
+
+/// Creates static demonstration data. Values are intentionally not readings
+/// from the host and are marked with `static-simulation` provenance.
+pub fn simulated_telemetry(
+    scenario: TelemetryScenario,
+) -> Result<TelemetrySnapshot, TelemetryError> {
+    let mut snapshot = base_telemetry();
+    match scenario {
+        TelemetryScenario::Valid => {}
+        TelemetryScenario::Absent => {
+            snapshot.power[1].reading.value = None;
+            snapshot.power[1].reading.state = TelemetryState::Unavailable;
+        }
+        TelemetryScenario::Unvalidated => {
+            snapshot.temperatures[0].reading.value = None;
+            snapshot.temperatures[0].reading.state = TelemetryState::Unvalidated;
+        }
+        TelemetryScenario::Inconsistent => {
+            snapshot.power[0].reading.unit = TelemetryUnit::Megahertz;
+        }
+        TelemetryScenario::ReadError => {
+            snapshot.power[1].reading.value = None;
+            snapshot.power[1].reading.state = TelemetryState::ReadError;
+        }
+    }
+    snapshot.validate()?;
+    Ok(snapshot)
+}
+
+fn base_telemetry() -> TelemetrySnapshot {
+    let provenance = simulated_telemetry_provenance("legion-fixtures::base_telemetry");
+    TelemetrySnapshot {
+        artifact: TelemetryArtifact::StaticSimulation,
+        identity: DeviceIdentity {
+            model: "Legion Slim 5 16ARP9".to_owned(),
+            machine_type: "83EX".to_owned(),
+            bios_version: "NUCN15WW".to_owned(),
+            board_name: "LNVNB161216".to_owned(),
+        },
+        profiles: EnergyProfiles {
+            profiles: vec![
+                EnergyProfile {
+                    name: "balanced".to_owned(),
+                    active: true,
+                    state: TelemetryState::Available,
+                    provenance: provenance.clone(),
+                },
+                EnergyProfile {
+                    name: "performance".to_owned(),
+                    active: false,
+                    state: TelemetryState::Available,
+                    provenance: provenance.clone(),
+                },
+            ],
+        },
+        temperatures: vec![TemperatureReading {
+            sensor: "cpu-package-demo".to_owned(),
+            reading: value(
+                Some(68.0),
+                TelemetryUnit::Celsius,
+                ValueClassification::InstantaneousMeasurement,
+                TelemetryState::Available,
+                provenance.clone(),
+            ),
+        }],
+        frequencies: vec![
+            FrequencyReading {
+                component: "cpu-demo".to_owned(),
+                reading: value(
+                    Some(3800.0),
+                    TelemetryUnit::Megahertz,
+                    ValueClassification::InstantaneousMeasurement,
+                    TelemetryState::Available,
+                    provenance.clone(),
+                ),
+            },
+            FrequencyReading {
+                component: "cpu-reference-demo".to_owned(),
+                reading: value(
+                    Some(3500.0),
+                    TelemetryUnit::Megahertz,
+                    ValueClassification::NominalValue,
+                    TelemetryState::Available,
+                    provenance.clone(),
+                ),
+            },
+        ],
+        power: vec![
+            PowerReading {
+                component: "cpu-package-limit-demo".to_owned(),
+                kind: PowerReadingKind::ConfiguredLimit,
+                reading: value(
+                    Some(55.0),
+                    TelemetryUnit::Watts,
+                    ValueClassification::ConfiguredLimit,
+                    TelemetryState::Available,
+                    provenance.clone(),
+                ),
+            },
+            PowerReading {
+                component: "cpu-package-consumption-demo".to_owned(),
+                kind: PowerReadingKind::InstantaneousConsumption,
+                reading: value(
+                    Some(31.5),
+                    TelemetryUnit::Watts,
+                    ValueClassification::InstantaneousMeasurement,
+                    TelemetryState::Available,
+                    provenance.clone(),
+                ),
+            },
+        ],
+        fans: vec![FanTelemetry {
+            fan: "cpu-fan-demo".to_owned(),
+            reported_speed: value(
+                Some(0),
+                TelemetryUnit::Rpm,
+                ValueClassification::InstantaneousMeasurement,
+                TelemetryState::Unvalidated,
+                provenance,
+            ),
+            validation: FanValidation::Unvalidated,
+            interpretation: FanInterpretation::NonConclusive,
+        }],
+    }
+}
+
+fn value<T>(
+    value: Option<T>,
+    unit: TelemetryUnit,
+    classification: ValueClassification,
+    state: TelemetryState,
+    provenance: TelemetryProvenance,
+) -> TelemetryValue<T> {
+    TelemetryValue {
+        value,
+        unit,
+        classification,
+        state,
+        provenance,
+    }
+}
+
+fn simulated_telemetry_provenance(source: &str) -> TelemetryProvenance {
+    TelemetryProvenance {
+        artifact: TelemetryArtifact::StaticSimulation,
+        source: source.to_owned(),
+        confidence: ConfidenceLevel::Low,
     }
 }
 
@@ -310,5 +484,79 @@ mod tests {
             SimulatedWmiTransport::new(WmiScenario::Valid).execute(&request),
             Err(WmiTransportError::UnsupportedOperation { .. })
         ));
+    }
+
+    #[test]
+    fn telemetry_fixture_keeps_limits_and_consumption_distinct() {
+        let snapshot = simulated_telemetry(TelemetryScenario::Valid).unwrap();
+        assert_eq!(snapshot.artifact, TelemetryArtifact::StaticSimulation);
+        assert_eq!(
+            snapshot.power[0].reading.classification,
+            ValueClassification::ConfiguredLimit
+        );
+        assert_eq!(
+            snapshot.power[1].reading.classification,
+            ValueClassification::InstantaneousMeasurement
+        );
+    }
+
+    #[test]
+    fn telemetry_fixtures_cover_absent_unvalidated_and_read_errors() {
+        let absent = simulated_telemetry(TelemetryScenario::Absent).unwrap();
+        assert_eq!(absent.power[1].reading.value, None);
+        assert_eq!(absent.power[1].reading.state, TelemetryState::Unavailable);
+
+        let unvalidated = simulated_telemetry(TelemetryScenario::Unvalidated).unwrap();
+        assert_eq!(unvalidated.temperatures[0].reading.value, None);
+        assert_eq!(
+            unvalidated.temperatures[0].reading.state,
+            TelemetryState::Unvalidated
+        );
+
+        let error = simulated_telemetry(TelemetryScenario::ReadError).unwrap();
+        assert_eq!(error.power[1].reading.value, None);
+        assert_eq!(error.power[1].reading.state, TelemetryState::ReadError);
+    }
+
+    #[test]
+    fn telemetry_fixture_rejects_inconsistent_units() {
+        assert!(matches!(
+            simulated_telemetry(TelemetryScenario::Inconsistent),
+            Err(TelemetryError::InconsistentValue { .. })
+        ));
+    }
+
+    #[test]
+    fn telemetry_fixture_keeps_zero_rpm_non_conclusive() {
+        let snapshot = simulated_telemetry(TelemetryScenario::Valid).unwrap();
+        let fan = &snapshot.fans[0];
+        assert_eq!(fan.reported_speed.value, Some(0));
+        assert_eq!(fan.reported_speed.state, TelemetryState::Unvalidated);
+        assert_eq!(fan.interpretation, FanInterpretation::NonConclusive);
+    }
+
+    #[test]
+    fn telemetry_fixture_marks_every_source_as_static_simulation() {
+        let snapshot = simulated_telemetry(TelemetryScenario::Valid).unwrap();
+        assert_eq!(snapshot.artifact, TelemetryArtifact::StaticSimulation);
+        assert!(
+            snapshot
+                .profiles
+                .profiles
+                .iter()
+                .all(|profile| profile.provenance.artifact == TelemetryArtifact::StaticSimulation)
+        );
+        assert!(snapshot.temperatures.iter().all(|reading| {
+            reading.reading.provenance.artifact == TelemetryArtifact::StaticSimulation
+        }));
+        assert!(snapshot.frequencies.iter().all(|reading| {
+            reading.reading.provenance.artifact == TelemetryArtifact::StaticSimulation
+        }));
+        assert!(snapshot.power.iter().all(|reading| {
+            reading.reading.provenance.artifact == TelemetryArtifact::StaticSimulation
+        }));
+        assert!(snapshot.fans.iter().all(|fan| {
+            fan.reported_speed.provenance.artifact == TelemetryArtifact::StaticSimulation
+        }));
     }
 }

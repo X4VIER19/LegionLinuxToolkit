@@ -21,9 +21,11 @@ es la familia Legion ni un GUID WMI aislado.
    WMI explícitamente iniciada por el usuario y autorizada para el equipo real.
    Cada adaptador valida formato, límites y unidades antes de publicar datos.
 4. **Modelo de dominio.** Expone instantáneas inmutables: `DeviceIdentity`,
-   `PlatformProfile`, `FirmwareAttribute`, `FanTelemetry` y `Capability`.
-   Incluye origen, unidad, fecha y confianza; evita presentar límites térmicos
-   como temperaturas en tiempo real.
+   `EnergyProfiles`, `TelemetrySnapshot`, `TelemetryValue`, `FanTelemetry` y
+   `Capability`. Cada valor conserva origen, unidad, clasificación
+   (instantáneo, límite configurado o nominal), estado y confianza; evita
+   presentar límites térmicos como temperaturas en tiempo real o límites de
+   potencia como consumo.
 5. **Presentación.** Un CLI inicialmente; una GUI futura consume la misma API.
    Debe mostrar claramente datos no disponibles, no validados y potencialmente
    obsoletos.

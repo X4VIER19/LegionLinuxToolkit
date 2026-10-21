@@ -1,4 +1,7 @@
-use legion_core::{MatchResult, Snapshot, WmiResponse, WmiTransportError, parse_snapshot};
+use legion_core::{
+    MatchResult, Snapshot, TelemetrySnapshot, TelemetryValue, WmiResponse, WmiTransportError,
+    parse_snapshot,
+};
 use serde::Serialize;
 use std::{env, process::ExitCode};
 
@@ -50,7 +53,7 @@ fn run(args: Vec<String>) -> Result<String, String> {
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
-            "summary" | "profiles" | "attributes" | "compatibility" | "wmi" => {
+            "summary" | "profiles" | "attributes" | "compatibility" | "telemetry" | "wmi" => {
                 view = &args[index]
             }
             "--format" => {
@@ -70,7 +73,7 @@ fn run(args: Vec<String>) -> Result<String, String> {
                 scenario = args.get(index).ok_or("--scenario requires a fixture name")?;
             }
             "--help" | "-h" => {
-                return Ok("Usage: legion-cli [summary|profiles|attributes] [--format text|json] [--fixture valid|missing|malformed]\n       legion-cli compatibility [--device known|unknown|incomplete] [--format text|json]\n       legion-cli wmi [--scenario valid|unavailable|inconsistent-buffer|unsupported] [--format text|json]\nAll data is embedded and simulated.".into())
+                return Ok("Usage: legion-cli [summary|profiles|attributes] [--format text|json] [--fixture valid|missing|malformed]\n       legion-cli compatibility [--device known|unknown|incomplete] [--format text|json]\n       legion-cli telemetry [--scenario valid|absent|unvalidated|inconsistent|read-error] [--format text|json]\n       legion-cli wmi [--scenario valid|unavailable|inconsistent-buffer|unsupported] [--format text|json]\nAll data is embedded and simulated.".into())
             }
             other => return Err(format!("unsupported argument: {other}")),
         }
@@ -85,6 +88,9 @@ fn run(args: Vec<String>) -> Result<String, String> {
     if view == "wmi" {
         return wmi(scenario, format);
     }
+    if view == "telemetry" {
+        return telemetry(scenario, format);
+    }
     let input = legion_fixtures::named(fixture)
         .ok_or_else(|| format!("unknown simulated fixture: {fixture}"))?;
     let snapshot = parse_snapshot(input).map_err(|error| error.to_string())?;
@@ -98,6 +104,18 @@ fn run(args: Vec<String>) -> Result<String, String> {
             available: &snapshot.profiles,
         }),
         ("attributes", "json") => json(&snapshot.attributes),
+        _ => unreachable!(),
+    }
+}
+
+fn telemetry(scenario: &str, format: &str) -> Result<String, String> {
+    let scenario = legion_fixtures::telemetry_scenario(scenario)
+        .ok_or_else(|| format!("unknown simulated telemetry scenario: {scenario}"))?;
+    let snapshot =
+        legion_fixtures::simulated_telemetry(scenario).map_err(|error| error.to_string())?;
+    match format {
+        "json" => json(&snapshot),
+        "text" => Ok(text_telemetry(&snapshot)),
         _ => unreachable!(),
     }
 }
@@ -179,6 +197,80 @@ fn text_attributes(snapshot: &Snapshot) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn text_telemetry(snapshot: &TelemetrySnapshot) -> String {
+    let active_profile = snapshot
+        .profiles
+        .active()
+        .map(|profile| profile.name.as_str())
+        .unwrap_or("unavailable");
+    let temperatures = snapshot
+        .temperatures
+        .iter()
+        .map(|reading| format!("- {}: {}", reading.sensor, text_value(&reading.reading)))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let frequencies = snapshot
+        .frequencies
+        .iter()
+        .map(|reading| format!("- {}: {}", reading.component, text_value(&reading.reading)))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let power = snapshot
+        .power
+        .iter()
+        .map(|reading| format!("- {}: {}", reading.component, text_value(&reading.reading)))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let fans = snapshot
+        .fans
+        .iter()
+        .map(|fan| {
+            let zero_note = (fan.reported_speed.value == Some(0)
+                && fan.interpretation == legion_core::FanInterpretation::NonConclusive)
+                .then_some("; zero RPM does not establish a stopped fan")
+                .unwrap_or("");
+            format!(
+                "- {}: {} [validation={}; interpretation={:?}{}]",
+                fan.fan,
+                text_value(&fan.reported_speed),
+                match fan.validation {
+                    legion_core::FanValidation::Validated => "validated",
+                    legion_core::FanValidation::Unvalidated => "unvalidated",
+                },
+                fan.interpretation,
+                zero_note
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "LegionLinuxToolkit — simulated telemetry only\nModel: {} ({})\nActive profile: {}\nTemperatures:\n{}\nFrequencies:\n{}\nPower:\n{}\nFans:\n{}\nNo host sensors, firmware, or profiles were accessed or changed.",
+        snapshot.identity.model,
+        snapshot.identity.machine_type,
+        active_profile,
+        temperatures,
+        frequencies,
+        power,
+        fans,
+    )
+}
+
+fn text_value<T: std::fmt::Display>(reading: &TelemetryValue<T>) -> String {
+    let value = reading
+        .value
+        .as_ref()
+        .map(ToString::to_string)
+        .unwrap_or_else(|| "no numeric value".to_owned());
+    format!(
+        "{} {} [{}; {}; confidence={}; static simulation]",
+        value,
+        reading.unit.as_str(),
+        reading.classification.as_str(),
+        reading.state.as_str(),
+        reading.provenance.confidence.as_str(),
+    )
 }
 
 fn text_compatibility(result: &MatchResult) -> String {
@@ -333,5 +425,52 @@ mod tests {
     fn rejects_paths_as_wmi_scenario_names() {
         let error = run(vec!["wmi".into(), "--scenario".into(), "/sys".into()]).unwrap_err();
         assert!(error.contains("unknown simulated WMI scenario"));
+    }
+
+    #[test]
+    fn renders_simulated_telemetry_with_explicit_units_and_provenance() {
+        let output = run(vec!["telemetry".into(), "--format".into(), "json".into()]).unwrap();
+        let decoded: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(decoded["source"], "simulated");
+        assert_eq!(decoded["data"]["artifact"], "static-simulation");
+        assert_eq!(decoded["data"]["temperatures"][0]["reading"]["unit"], "°C");
+        assert_eq!(
+            decoded["data"]["temperatures"][0]["reading"]["provenance"]["artifact"],
+            "static-simulation"
+        );
+        assert_eq!(
+            decoded["data"]["temperatures"][0]["reading"]["provenance"]["source"],
+            "legion-fixtures::base_telemetry"
+        );
+        assert_eq!(
+            decoded["data"]["temperatures"][0]["reading"]["provenance"]["confidence"],
+            "low"
+        );
+        assert_eq!(
+            decoded["data"]["power"][0]["reading"]["classification"],
+            "configured-limit"
+        );
+    }
+
+    #[test]
+    fn displays_a_zero_rpm_as_non_conclusive() {
+        let output = run(vec!["telemetry".into()]).unwrap();
+        assert!(output.contains("0 RPM"));
+        assert!(output.contains("NonConclusive"));
+        assert!(output.contains("does not establish a stopped fan"));
+    }
+
+    #[test]
+    fn reports_telemetry_inconsistencies_and_rejects_host_path_names() {
+        let error = run(vec![
+            "telemetry".into(),
+            "--scenario".into(),
+            "inconsistent".into(),
+        ])
+        .unwrap_err();
+        assert!(error.contains("inconsistent simulated telemetry"));
+
+        let path = run(vec!["telemetry".into(), "--scenario".into(), "/sys".into()]).unwrap_err();
+        assert!(path.contains("unknown simulated telemetry scenario"));
     }
 }

@@ -6,11 +6,17 @@ use serde::Serialize;
 use std::fmt;
 
 mod compatibility;
+mod telemetry;
 mod wmi;
 
 pub use compatibility::{
     CapabilityRecord, CompatibilityProfile, CompatibilityRegistry, CompatibilityStatus,
     DeviceDescriptor, DeviceQuery, Evidence, EvidenceKind, MatchResult, ObservationPlatform,
+};
+pub use telemetry::{
+    ConfidenceLevel, EnergyProfile, EnergyProfiles, FanTelemetry, FrequencyReading, PowerReading,
+    PowerReadingKind, TelemetryArtifact, TelemetryError, TelemetryProvenance, TelemetrySnapshot,
+    TelemetryState, TelemetryUnit, TelemetryValue, TemperatureReading, ValueClassification,
 };
 pub use wmi::{
     WmiAccess, WmiArgument, WmiArtifact, WmiKnowledge, WmiMethodMetadata, WmiObservationPlatform,
