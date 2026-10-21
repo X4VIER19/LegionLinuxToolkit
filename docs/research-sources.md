@@ -19,12 +19,20 @@ operación WMI en Linux.
 
 ## Código fuente externo: estado de inspección
 
-No se ha realizado una auditoría o revisión completa de código fuente externo
-para LegionLinuxToolkit. El archivo del kernel
-[`wmi-other.c`](https://github.com/torvalds/linux/blob/master/drivers/platform/x86/lenovo/wmi-other.c)
-se ha identificado como referencia disponible (GPL-2.0-or-later), pero no se
-presenta como implementación inspeccionada ni compatible con 83EX. Tampoco se
-ha copiado código de LenovoLegionLinux o Lenovo Legion Toolkit.
+En la investigación pasiva de Fase 4A se inspeccionaron de forma dirigida la
+API, guía y fuentes públicas del kernel `core.c`, `wmi-gamezone.c` y
+`wmi-other.c` (SPDX `GPL-2.0-or-later`), además de fragmentos de
+`kernel_module/legion-laptop.c` de LenovoLegionLinux (SPDX
+`GPL-2.0-or-later`). Esta inspección está documentada en
+[el informe WMI](wmi-passive-research.md) y en el
+[análisis del contrato `Fan_Get_Table`](fan-get-table-contract-research.md);
+no es una auditoría completa ni una prueba de compatibilidad con el 83EX.
+
+La licencia global de LenovoLegionLinux no se declara validada aquí: solo se ha
+verificado el SPDX del archivo concreto inspeccionado. No se ha copiado código
+de LenovoLegionLinux, Lenovo Legion Toolkit ni del kernel. Cualquier
+reutilización futura exige revisar licencia, atribución y compatibilidad de cada
+archivo con MIT OR Apache-2.0.
 
 ## Hipótesis pendientes de verificar
 

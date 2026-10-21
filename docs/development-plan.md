@@ -70,6 +70,10 @@ callback del futuro controlador (`probe()`, `init()`, `remove()` o
 
 ## Fase 4 — Consulta manual de `Fan_Get_Table` (solo tras autorización)
 
+La investigación pasiva previa está recopilada en
+[Fase 4A: investigación pasiva de WMI](wmi-passive-research.md). No habilita
+una consulta real ni cambia los requisitos de autorización de esta fase.
+
 Antes de esta fase, presentar el método, argumentos exactos, efecto esperado,
 límites de respuesta y plan de reversión. Tras autorización explícita, exponer
 un único comando opt-in de lectura con parámetros restrictivos y registro local.
