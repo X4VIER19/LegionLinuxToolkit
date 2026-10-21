@@ -91,11 +91,14 @@ impl ConfidenceLevel {
     }
 }
 
-/// Origin class. Phase 5A deliberately exposes only static simulation.
+/// Origin class. No real adapter constructs `LinuxReadOnly` in this phase; it
+/// reserves a distinct label so future host data cannot be confused with a
+/// static fixture.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TelemetryArtifact {
     StaticSimulation,
+    LinuxReadOnly,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

@@ -107,6 +107,7 @@ están separados de las hipótesis en [docs/known-interfaces.md](docs/known-inte
 - [Telemetría y perfiles simulados](docs/telemetry-simulation.md)
 - [Investigación de telemetría Linux](docs/linux-telemetry-research.md)
 - [Adaptador simulado de `platform_profile`](docs/platform-profile-simulation.md)
+- [Adaptador Linux simulado de `platform_profile`](docs/linux-platform-profile-adapter.md)
 - [Arquitectura modular](docs/architecture.md)
 - [Plan incremental](docs/development-plan.md)
 - [Fuentes y licencias](docs/research-sources.md)
