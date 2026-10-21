@@ -39,8 +39,9 @@ como respaldo y no se ejecuta con `sudo`.
 
 Implementar una base declarativa local por modelo, DMI, BIOS, interfaz,
 operación y versión de kernel cuando corresponda. Para 83EX/NUCN15WW, marcar
-perfiles y atributos como lectura observada; ventilador como desconocido. El
-registro no habilita métodos WMI.
+perfiles y atributos con evidencia Linux; observaciones WMI de Windows se
+mantienen diferenciadas. El registro no habilita métodos WMI ni controles de
+hardware.
 
 **Criterio de salida:** el programa se niega a declarar soporte de ventilador o
 escritura basándose solo en GUID, familia, DMI o una tabla de otro modelo.

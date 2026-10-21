@@ -94,6 +94,7 @@ están separados de las hipótesis en [docs/known-interfaces.md](docs/known-inte
 - [Resultados Linux](docs/linux-observations.md)
 - [Resultados Windows y WMI](docs/windows-wmi-observations.md)
 - [Interfaces conocidas](docs/known-interfaces.md)
+- [Registro de compatibilidad](docs/compatibility-registry.md)
 - [Arquitectura modular](docs/architecture.md)
 - [Plan incremental](docs/development-plan.md)
 - [Fuentes y licencias](docs/research-sources.md)

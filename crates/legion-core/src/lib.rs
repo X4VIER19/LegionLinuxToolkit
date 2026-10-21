@@ -5,6 +5,13 @@
 use serde::Serialize;
 use std::fmt;
 
+mod compatibility;
+
+pub use compatibility::{
+    CapabilityRecord, CompatibilityProfile, CompatibilityRegistry, CompatibilityStatus,
+    DeviceDescriptor, DeviceQuery, Evidence, EvidenceKind, MatchResult, ObservationPlatform,
+};
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DeviceIdentity {
     pub model: String,

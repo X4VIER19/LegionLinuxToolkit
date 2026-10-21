@@ -28,6 +28,9 @@ dependencies = [
 [[package]]
 name = "legion-fixtures"
 version = "0.1.0"
+dependencies = [
+ "legion-core",
+]
 
 [[package]]
 name = "memchr"
