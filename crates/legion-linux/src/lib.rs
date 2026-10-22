@@ -242,7 +242,7 @@ pub enum PlatformProfileSourceRead {
 /// Supplies bytes for fixed entries. This trait deliberately has no path
 /// argument. Implementations must enforce their own read-size cap before they
 /// allocate or return bytes. It is sealed so no external crate can introduce a
-/// host-reading provider during this simulated-only phase.
+/// host-reading provider outside the reviewed Linux implementation.
 pub trait PlatformProfileByteSource: private::Sealed {
     fn read(
         &self,
@@ -260,8 +260,16 @@ mod private {
     pub trait Sealed {}
 }
 
+/// Explicit, one-shot platform-profile query shared by future applications.
+/// Implementations must return after one logical query and must not perform
+/// monitoring, retries, writes, or background work.
+pub trait PlatformProfileQuery: private::Sealed {
+    fn read_once(&self) -> Result<LinuxPlatformProfileReading, LinuxPlatformProfileError>;
+}
+
 /// Read-only orchestration over an injected source. It always routes decoded
 /// text through `PlatformProfileAdapter`; no result bypasses its validation.
+/// Its source remains sealed, so an external caller cannot add a host reader.
 #[derive(Debug, Clone)]
 pub struct LinuxPlatformProfileReader<S> {
     source: S,
@@ -279,10 +287,17 @@ where
         }
     }
 
-    pub fn read(&self) -> Result<LinuxPlatformProfileReading, LinuxPlatformProfileError> {
+    pub fn read_once(&self) -> Result<LinuxPlatformProfileReading, LinuxPlatformProfileError> {
         let active = self.read_text(PlatformProfileEntry::Active)?;
         let choices = self.read_text(PlatformProfileEntry::Choices)?;
         self.publish(active, choices)
+    }
+
+    /// Compatibility alias for existing simulated callers. New application
+    /// code should use `PlatformProfileQuery::read_once` to make its
+    /// single-query semantics explicit.
+    pub fn read(&self) -> Result<LinuxPlatformProfileReading, LinuxPlatformProfileError> {
+        self.read_once()
     }
 
     /// Reads choices, active profile, then choices again. Equality of the two
@@ -347,6 +362,17 @@ where
             .map_err(|_| PlatformProfileSourceError::InvalidUtf8 { entry }.into())
     }
 }
+
+impl<S> PlatformProfileQuery for LinuxPlatformProfileReader<S>
+where
+    S: PlatformProfileByteSource,
+{
+    fn read_once(&self) -> Result<LinuxPlatformProfileReading, LinuxPlatformProfileError> {
+        LinuxPlatformProfileReader::read_once(self)
+    }
+}
+
+impl<S> private::Sealed for LinuxPlatformProfileReader<S> where S: PlatformProfileByteSource {}
 
 fn provenance_for(origin: &LinuxPlatformProfileOrigin) -> TelemetryProvenance {
     match origin {
@@ -865,7 +891,7 @@ pub fn approved_one_shot_platform_profile_read(
 
     let provider = SysfsPlatformProfileProvider::new(ApprovedRealReadActivation::ApprovedOneShot)
         .map_err(ExperimentalRealReadError::from)?;
-    provider.read().map_err(ExperimentalRealReadError::Reading)
+    PlatformProfileQuery::read_once(&provider).map_err(ExperimentalRealReadError::Reading)
 }
 
 /// Private production-shaped provider. It is neither exported nor connected to
@@ -894,12 +920,20 @@ impl SysfsPlatformProfileProvider {
             ),
         })
     }
+}
 
-    #[allow(dead_code)]
-    fn read(&self) -> Result<LinuxPlatformProfileReading, LinuxPlatformProfileError> {
+/// The private Linux provider keeps the stronger three-read consistency rule
+/// behind the shared one-shot application interface. It is compiled only with
+/// the experimental feature and remains unreachable from the normal CLI.
+#[cfg(feature = "approved-real-platform-profile-read")]
+impl PlatformProfileQuery for SysfsPlatformProfileProvider {
+    fn read_once(&self) -> Result<LinuxPlatformProfileReading, LinuxPlatformProfileError> {
         self.reader.read_consistent()
     }
 }
+
+#[cfg(feature = "approved-real-platform-profile-read")]
+impl private::Sealed for SysfsPlatformProfileProvider {}
 
 #[cfg(feature = "approved-real-platform-profile-read")]
 #[derive(Debug)]
@@ -1271,6 +1305,51 @@ mod tests {
         assert!(matches!(
             result.origin,
             LinuxPlatformProfileOrigin::StaticSimulation { .. }
+        ));
+    }
+
+    #[test]
+    fn shared_read_once_interface_validates_and_preserves_simulated_provenance() {
+        let valid_source = tree(regular("performance\n"), regular("balanced performance\n"));
+        let valid = LinuxPlatformProfileReader::new(valid_source.clone(), MAXIMUM_SIZE);
+        let reading = PlatformProfileQuery::read_once(&valid).unwrap();
+        assert_eq!(reading.profile.state, TelemetryState::Available);
+        assert_eq!(
+            reading.profile.provenance.artifact,
+            TelemetryArtifact::StaticSimulation
+        );
+        assert!(matches!(
+            reading.origin,
+            LinuxPlatformProfileOrigin::StaticSimulation { .. }
+        ));
+
+        let alias_reading = LinuxPlatformProfileReader::new(valid_source, MAXIMUM_SIZE)
+            .read()
+            .unwrap();
+        assert_eq!(reading, alias_reading);
+
+        let missing = LinuxPlatformProfileReader::new(
+            tree(SimulatedEntry::Missing, regular("performance\n")),
+            MAXIMUM_SIZE,
+        );
+        assert!(matches!(
+            PlatformProfileQuery::read_once(&missing),
+            Err(LinuxPlatformProfileError::Source(
+                PlatformProfileSourceError::Missing {
+                    entry: PlatformProfileEntry::Active
+                }
+            ))
+        ));
+
+        let inconsistent = LinuxPlatformProfileReader::new(
+            tree(regular("performance\n"), regular("balanced\n")),
+            MAXIMUM_SIZE,
+        );
+        assert!(matches!(
+            PlatformProfileQuery::read_once(&inconsistent),
+            Err(LinuxPlatformProfileError::Parse(
+                PlatformProfileError::ActiveNotAvailable { .. }
+            ))
         ));
     }
 
