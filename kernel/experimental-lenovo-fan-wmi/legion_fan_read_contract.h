@@ -3,7 +3,7 @@
  * Versioned, read-only contract proposed for a future kernel/userspace bridge.
  *
  * This header does not create an endpoint. It is a layout specification only;
- * the experimental module remains unregistered and returns -EOPNOTSUPP.
+ * the endpoint returns -EOPNOTSUPP while the real-read option is disabled.
  */
 
 #ifndef _LEGION_FAN_READ_CONTRACT_H
@@ -30,10 +30,10 @@ enum legion_fan_read_status {
  * for the 88 bytes of FAT2 only after a successful read.
  */
 struct legion_fan_read_response_v1 {
-	__u16 version;
-	__u16 header_size;
-	__u32 status;
-	__u32 payload_size;
+	__le16 version;
+	__le16 header_size;
+	__le32 status;
+	__le32 payload_size;
 	__u8 payload[LEGION_FAN_READ_FAT2_BYTES];
 } __packed;
 

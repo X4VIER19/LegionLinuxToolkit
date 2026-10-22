@@ -14,9 +14,14 @@
 #include <linux/acpi.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
+#include <linux/kconfig.h>
 #include <linux/miscdevice.h>
+#include <linux/mutex.h>
 #include <linux/module.h>
+#include <linux/slab.h>
 #include <linux/types.h>
+#include <linux/uaccess.h>
+#include <linux/unaligned.h>
 #include <linux/wmi.h>
 
 #include "legion_fan_read_contract.h"
@@ -60,21 +65,35 @@ static const struct wmi_device_id legion_fan_wmi_id_table[] = {
 	{}
 };
 
+/* Protected passive binding state; it is set and cleared without WMI calls. */
+static DEFINE_MUTEX(legion_fan_wmi_lock);
+static struct wmi_device *legion_fan_wmi_device;
+
 /*
  * The WMI core calls this only after the exact GUID in id_table matches. This
  * establishes passive ownership of that device; it does not query firmware.
  */
 static int legion_fan_wmi_probe(struct wmi_device *wdev, const void *context)
 {
-	(void)wdev;
 	(void)context;
+
+	mutex_lock(&legion_fan_wmi_lock);
+	if (legion_fan_wmi_device && legion_fan_wmi_device != wdev) {
+		mutex_unlock(&legion_fan_wmi_lock);
+		return -EBUSY;
+	}
+	legion_fan_wmi_device = wdev;
+	mutex_unlock(&legion_fan_wmi_lock);
 
 	return 0;
 }
 
 static void legion_fan_wmi_remove(struct wmi_device *wdev)
 {
-	(void)wdev;
+	mutex_lock(&legion_fan_wmi_lock);
+	if (legion_fan_wmi_device == wdev)
+		legion_fan_wmi_device = NULL;
+	mutex_unlock(&legion_fan_wmi_lock);
 }
 
 static struct wmi_driver legion_fan_wmi_driver = {
@@ -86,33 +105,123 @@ static struct wmi_driver legion_fan_wmi_driver = {
 	.remove = legion_fan_wmi_remove,
 };
 
-/*
- * Deliberately unavailable. A future reviewed implementation must add its own
- * explicit activation barrier before it can call any kernel WMI API.  This
- * skeleton never evaluates method 5.
- */
-static int __maybe_unused
-legion_fan_wmi_read_once_disabled(struct wmi_device *wdev,
-				  const struct legion_fan_get_table_request *request,
-				  struct acpi_buffer *output)
+#if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI_REAL_READ)
+static void legion_fan_response_init(struct legion_fan_read_response_v1 *response)
 {
-	if (!wdev || !request || !output)
-		return -EINVAL;
-
-	return -EOPNOTSUPP;
+	memset(response, 0, sizeof(*response));
+	response->version = cpu_to_le16(LEGION_FAN_READ_CONTRACT_VERSION);
+	response->header_size = cpu_to_le16(LEGION_FAN_READ_HEADER_BYTES);
+	response->status = cpu_to_le32(LEGION_FAN_READ_UNSUPPORTED);
 }
 
-/* Proposed binary endpoint. Reads fail closed without firmware access. */
+static void legion_fan_response_set_status(
+	struct legion_fan_read_response_v1 *response,
+	enum legion_fan_read_status status)
+{
+	response->status = cpu_to_le32(status);
+	response->payload_size = cpu_to_le32(0);
+}
+
+/*
+ * This code is compiled only by an explicit, non-default Kconfig option. It
+ * is reachable solely from the read callback below, never from probe/init/
+ * remove/exit. The returned FAT2 words remain opaque at this layer.
+ */
+static void legion_fan_get_table_once(
+	struct legion_fan_read_response_v1 *response)
+{
+	const struct legion_fan_get_table_request request = {
+		.fan_id = 1,
+		.sensor_id = 4,
+	};
+	struct acpi_buffer input = {
+		.length = sizeof(request),
+		.pointer = (void *)&request,
+	};
+	struct acpi_buffer output = {
+		.length = ACPI_ALLOCATE_BUFFER,
+		.pointer = NULL,
+	};
+	union acpi_object *object;
+	acpi_status status;
+
+	mutex_lock(&legion_fan_wmi_lock);
+	if (!legion_fan_wmi_device) {
+		legion_fan_response_set_status(response, LEGION_FAN_READ_UNSUPPORTED);
+		goto unlock;
+	}
+
+	status = wmidev_evaluate_method(legion_fan_wmi_device,
+					LENOVO_FAN_WMI_INSTANCE,
+					LENOVO_FAN_GET_TABLE_METHOD,
+					&input, &output);
+	if (ACPI_FAILURE(status)) {
+		legion_fan_response_set_status(response,
+					       LEGION_FAN_READ_TRANSPORT_ERROR);
+		goto free_output;
+	}
+
+	object = output.pointer;
+	if (!object || object->type != ACPI_TYPE_BUFFER) {
+		legion_fan_response_set_status(response,
+					       LEGION_FAN_READ_ACPI_RESPONSE_ERROR);
+		goto free_output;
+	}
+	if (object->buffer.length != LENOVO_FAN_GET_TABLE_FAT2_BYTES) {
+		legion_fan_response_set_status(response, LEGION_FAN_READ_ABI_ERROR);
+		goto free_output;
+	}
+	if (get_unaligned_le32(object->buffer.pointer) !=
+		LENOVO_FAN_GET_TABLE_POINTS ||
+	    get_unaligned_le32(object->buffer.pointer + 44) !=
+		LENOVO_FAN_GET_TABLE_POINTS) {
+		legion_fan_response_set_status(response, LEGION_FAN_READ_ABI_ERROR);
+		goto free_output;
+	}
+
+	memcpy(response->payload, object->buffer.pointer,
+	       LENOVO_FAN_GET_TABLE_FAT2_BYTES);
+	response->payload_size = cpu_to_le32(LENOVO_FAN_GET_TABLE_FAT2_BYTES);
+	response->status = cpu_to_le32(LEGION_FAN_READ_OK);
+
+free_output:
+	kfree(output.pointer);
+unlock:
+	mutex_unlock(&legion_fan_wmi_lock);
+}
+#endif
+
+/*
+ * The only possible firmware-call entry point. The feature is disabled by
+ * default; without it, every read fails closed with -EOPNOTSUPP.
+ */
 static ssize_t legion_fan_endpoint_read_disabled(struct file *file,
 					 char __user *buffer, size_t count,
 					 loff_t *offset)
 {
 	(void)file;
+
+#if !IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI_REAL_READ)
 	(void)buffer;
 	(void)count;
 	(void)offset;
-
 	return -EOPNOTSUPP;
+#else
+	struct legion_fan_read_response_v1 response;
+
+	if (*offset)
+		return 0;
+	if (count < sizeof(response))
+		return -EMSGSIZE;
+
+	legion_fan_response_init(&response);
+	legion_fan_get_table_once(&response);
+	if (copy_to_user(buffer, &response, sizeof(response)))
+		return -EFAULT;
+
+	*offset = sizeof(response);
+	return sizeof(response);
+#endif
 }
 
 static const struct file_operations legion_fan_endpoint_fops = {

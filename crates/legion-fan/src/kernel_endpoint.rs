@@ -129,6 +129,37 @@ mod tests {
     }
 
     #[test]
+    fn distinguishes_a_simulated_wmi_failure_from_an_acpi_response_failure() {
+        let transport = endpoint_fixture(FAN_KERNEL_READ_CONTRACT_VERSION, 2, 0);
+        assert_eq!(
+            consume_simulated_kernel_endpoint_bytes(&transport),
+            Err(KernelFanEndpointError::Contract(
+                KernelFanReadContractError::Status(KernelFanReadStatus::TransportError)
+            ))
+        );
+
+        let acpi = endpoint_fixture(FAN_KERNEL_READ_CONTRACT_VERSION, 3, 0);
+        assert_eq!(
+            consume_simulated_kernel_endpoint_bytes(&acpi),
+            Err(KernelFanEndpointError::Contract(
+                KernelFanReadContractError::Status(KernelFanReadStatus::AcpiResponseError)
+            ))
+        );
+    }
+
+    #[test]
+    fn rejects_a_fat2_with_an_invalid_declared_table_length() {
+        let mut bytes = endpoint_fixture(FAN_KERNEL_READ_CONTRACT_VERSION, 0, 88);
+        bytes[56..60].copy_from_slice(&9_u32.to_le_bytes());
+        assert!(matches!(
+            consume_simulated_kernel_endpoint_bytes(&bytes),
+            Err(KernelFanEndpointError::Contract(
+                KernelFanReadContractError::Abi(_)
+            ))
+        ));
+    }
+
+    #[test]
     fn rejects_truncated_responses() {
         assert_eq!(
             consume_simulated_kernel_endpoint_bytes(&[0; 99]),

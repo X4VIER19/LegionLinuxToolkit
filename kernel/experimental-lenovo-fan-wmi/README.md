@@ -44,6 +44,20 @@ No entrega datos FAT2, no controla ventiladores y no accede a WMI. Las
 respuestas sintéticas solo existen en fixtures Rust y se etiquetan como
 simulación. Este repositorio no instala el módulo ni habilita carga automática.
 
+## Lectura `Fan_Get_Table` preparada y bloqueada
+
+La opción Kconfig `LEGION_LINUX_EXPERIMENTAL_FAN_WMI_REAL_READ` está
+desactivada por defecto. Solo al compilar explícitamente con esa opción, una
+lectura del endpoint de 100 bytes puede llamar al método `5` con la instancia
+`0` y los dos bytes confirmados `[1, 4]`. No hay llamadas durante `probe`,
+inicialización, eliminación ni descarga.
+
+La ruta valida que ACPICA devuelva un objeto `Buffer`, que tenga exactamente 88
+bytes y que ambos contadores FAT2 sean diez. Copia los bytes sin interpretarlos
+y transmite por el contrato versión 1 un estado distinto para fallo de
+transporte WMI, objeto ACPI inválido, ABI inválido o no disponible. Sin la
+opción, toda lectura sigue devolviendo `-EOPNOTSUPP`.
+
 ## Vinculación WMI experimental
 
 La estructura privada `wmi_driver` identifica el GUID
