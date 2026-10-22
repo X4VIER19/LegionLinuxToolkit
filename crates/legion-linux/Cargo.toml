@@ -14,9 +14,13 @@ approved-real-platform-profile-read = []
 # activation, root path, or real-host constructor.
 experimental-dmi-identity-read = []
 approved-real-dmi-identity-read = ["experimental-dmi-identity-read"]
-# Compiles an unconstructable fan-WMI transport shape only. It has no host constructor,
-# no ACPI buffer codec, and always fails closed because the ABI is unknown.
+# Compiles an unconstructable fan-WMI transport shape only. It has no host
+# constructor and always fails closed: a supported kernel-space WMI driver is
+# still required before any firmware call can be considered.
 experimental-fan-wmi-transport = ["dep:legion-fan"]
+# Builds a planning-only entry point. It cannot invoke the transport or reach
+# a host WMI device, and is never enabled by default.
+experimental-fan-wmi-read = ["experimental-fan-wmi-transport"]
 
 [[bin]]
 name = "legion-linux-dmi-identity-real-read"
@@ -27,6 +31,11 @@ required-features = ["approved-real-dmi-identity-read"]
 name = "legion-linux-platform-profile-real-read"
 path = "src/bin/legion-linux-platform-profile-real-read.rs"
 required-features = ["approved-real-platform-profile-read"]
+
+[[bin]]
+name = "legion-linux-fan-wmi-read-experiment"
+path = "src/bin/legion-linux-fan-wmi-read-experiment.rs"
+required-features = ["experimental-fan-wmi-read"]
 
 [dependencies]
 legion-core = { path = "../legion-core" }
