@@ -1,0 +1,15 @@
+# This fragment is intentionally not included by any kernel tree or by this
+# repository's build files. It documents the opt-in configuration a future,
+# separately reviewed integration would require.
+
+config LEGION_LINUX_EXPERIMENTAL_FAN_WMI
+	tristate "LegionLinuxToolkit experimental Lenovo fan WMI reader"
+	depends on ACPI_WMI
+	default n
+	help
+	  Build the intentionally disabled skeleton for the Lenovo fan WMI reader.
+	  It contains no driver registration and cannot evaluate a WMI method.
+
+	  This option must remain disabled unless a separately reviewed phase
+	  explicitly authorizes both a kernel integration and a one-shot read-only
+	  Fan_Get_Table experiment for the documented machine and BIOS.
