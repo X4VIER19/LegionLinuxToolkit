@@ -2,6 +2,10 @@ use legion_core::{
     MatchResult, PlatformProfileReading, Snapshot, TelemetrySnapshot, TelemetryValue, WmiResponse,
     WmiTransportError, parse_snapshot,
 };
+use legion_linux::{
+    LinuxPlatformProfileReader, PlatformProfileEntry, PlatformProfileQuery, SimulatedEntry,
+    SimulatedPlatformProfileTree,
+};
 use serde::Serialize;
 use std::{env, process::ExitCode};
 
@@ -12,7 +16,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
-            eprintln!("error: {error}");
+            eprintln!("simulated-only CLI error: {error}");
             ExitCode::from(2)
         }
     }
@@ -125,12 +129,35 @@ fn telemetry(scenario: &str, format: &str) -> Result<String, String> {
 fn platform_profile(scenario: &str, format: &str) -> Result<String, String> {
     let scenario = legion_fixtures::platform_profile_scenario(scenario)
         .ok_or_else(|| format!("unknown simulated platform-profile scenario: {scenario}"))?;
-    let reading =
-        legion_fixtures::simulated_platform_profile(scenario).map_err(|error| error.to_string())?;
+    let raw = legion_fixtures::simulated_platform_profile_raw(scenario);
+    let reader = LinuxPlatformProfileReader::new(
+        SimulatedPlatformProfileTree::new("legion-cli-embedded-scenario")
+            .with_entry(
+                PlatformProfileEntry::Active,
+                simulated_platform_profile_entry(raw.active),
+            )
+            .with_entry(
+                PlatformProfileEntry::Choices,
+                simulated_platform_profile_entry(raw.choices),
+            ),
+        4096,
+    );
+    let reading = PlatformProfileQuery::read_once(&reader)
+        .map_err(|error| format!("simulated platform-profile query failed: {error}"))?;
     match format {
-        "json" => json(&reading),
-        "text" => Ok(text_platform_profile(&reading)),
+        "json" => json(reading.profile()),
+        "text" => Ok(text_platform_profile(reading.profile())),
         _ => unreachable!(),
+    }
+}
+
+/// The only CLI platform-profile input is a fixture value already held in
+/// memory. An absent fixture value stays absent; it is never replaced with an
+/// empty string or a host read.
+fn simulated_platform_profile_entry(value: Option<String>) -> SimulatedEntry {
+    match value {
+        Some(value) => SimulatedEntry::Regular(value.into_bytes()),
+        None => SimulatedEntry::Absent,
     }
 }
 
@@ -533,6 +560,46 @@ mod tests {
             decoded["data"]["provenance"]["artifact"],
             "static-simulation"
         );
+        assert_eq!(
+            decoded["data"]["provenance"]["source"],
+            "legion-linux::simulated-root:legion-cli-embedded-scenario"
+        );
+    }
+
+    #[test]
+    fn platform_profile_scenarios_use_the_shared_simulated_query() {
+        for scenario in ["valid", "active-only", "missing-active", "unknown"] {
+            let output = run(vec![
+                "platform-profile".into(),
+                "--scenario".into(),
+                scenario.into(),
+                "--format".into(),
+                "json".into(),
+            ])
+            .unwrap();
+            let decoded: serde_json::Value = serde_json::from_str(&output).unwrap();
+            assert_eq!(decoded["source"], "simulated");
+            assert_eq!(
+                decoded["data"]["provenance"]["artifact"],
+                "static-simulation"
+            );
+        }
+
+        for scenario in [
+            "empty-active",
+            "empty-choices",
+            "duplicate",
+            "inconsistent",
+            "malformed",
+        ] {
+            let error = run(vec![
+                "platform-profile".into(),
+                "--scenario".into(),
+                scenario.into(),
+            ])
+            .unwrap_err();
+            assert!(error.starts_with("simulated platform-profile query failed:"));
+        }
     }
 
     #[test]

@@ -157,6 +157,18 @@ pub fn platform_profile_scenario(name: &str) -> Option<PlatformProfileScenario> 
 pub fn simulated_platform_profile(
     scenario: PlatformProfileScenario,
 ) -> Result<PlatformProfileReading, PlatformProfileError> {
+    PlatformProfileAdapter.parse(PlatformProfileInput {
+        raw: simulated_platform_profile_raw(scenario),
+        provenance: simulated_telemetry_provenance("legion-fixtures::platform_profile"),
+    })
+}
+
+/// Exact in-memory fixture text for a closed platform-profile scenario. The
+/// caller receives data only; this API cannot select a file, host path, or
+/// acquisition provenance.
+pub fn simulated_platform_profile_raw(
+    scenario: PlatformProfileScenario,
+) -> PlatformProfileRawInput {
     let (active, choices) = match scenario {
         PlatformProfileScenario::Valid => (
             Some("balanced\n"),
@@ -173,13 +185,10 @@ pub fn simulated_platform_profile(
         PlatformProfileScenario::Inconsistent => (Some("balanced\n"), Some("performance\n")),
         PlatformProfileScenario::Malformed => (Some("balanced profile\n"), None),
     };
-    PlatformProfileAdapter.parse(PlatformProfileInput {
-        raw: PlatformProfileRawInput {
-            active: active.map(str::to_owned),
-            choices: choices.map(str::to_owned),
-        },
-        provenance: simulated_telemetry_provenance("legion-fixtures::platform_profile"),
-    })
+    PlatformProfileRawInput {
+        active: active.map(str::to_owned),
+        choices: choices.map(str::to_owned),
+    }
 }
 
 /// Creates static demonstration data. Values are intentionally not readings

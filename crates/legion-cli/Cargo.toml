@@ -8,6 +8,7 @@ authors.workspace = true
 [dependencies]
 legion-core = { path = "../legion-core" }
 legion-fixtures = { path = "../legion-fixtures" }
+legion-linux = { path = "../legion-linux" }
 serde.workspace = true
 serde_json.workspace = true
 

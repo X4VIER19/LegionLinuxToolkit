@@ -30,6 +30,7 @@ version = "0.1.0"
 dependencies = [
  "legion-core",
  "legion-fixtures",
+ "legion-linux",
  "serde",
  "serde_json",
 ]

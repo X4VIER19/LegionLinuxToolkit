@@ -236,7 +236,13 @@ impl From<PlatformProfileError> for LinuxPlatformProfileError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlatformProfileSourceRead {
     Complete(Vec<u8>),
-    Partial { bytes_read: usize },
+    /// The simulated source deliberately has no value for this entry. This
+    /// is distinct from a failed acquisition: it is passed to the adapter as
+    /// absent data so it can retain the unavailable state.
+    Absent,
+    Partial {
+        bytes_read: usize,
+    },
 }
 
 /// Supplies bytes for fixed entries. This trait deliberately has no path
@@ -316,14 +322,11 @@ where
 
     fn publish(
         &self,
-        active: String,
-        choices: String,
+        active: Option<String>,
+        choices: Option<String>,
     ) -> Result<LinuxPlatformProfileReading, LinuxPlatformProfileError> {
         let profile = PlatformProfileAdapter.parse(PlatformProfileInput {
-            raw: PlatformProfileRawInput {
-                active: Some(active),
-                choices: Some(choices),
-            },
+            raw: PlatformProfileRawInput { active, choices },
             // The adapter requires provenance, but the source-specific marker
             // is deliberately obtained only after parsing succeeds below.
             provenance: TelemetryProvenance {
@@ -344,9 +347,13 @@ where
         Ok(LinuxPlatformProfileReading { profile, origin })
     }
 
-    fn read_text(&self, entry: PlatformProfileEntry) -> Result<String, LinuxPlatformProfileError> {
+    fn read_text(
+        &self,
+        entry: PlatformProfileEntry,
+    ) -> Result<Option<String>, LinuxPlatformProfileError> {
         let bytes = match self.source.read(entry, self.maximum_size)? {
             PlatformProfileSourceRead::Complete(bytes) => bytes,
+            PlatformProfileSourceRead::Absent => return Ok(None),
             PlatformProfileSourceRead::Partial { bytes_read } => {
                 return Err(PlatformProfileSourceError::PartialRead { entry, bytes_read }.into());
             }
@@ -359,6 +366,7 @@ where
             .into());
         }
         String::from_utf8(bytes)
+            .map(Some)
             .map_err(|_| PlatformProfileSourceError::InvalidUtf8 { entry }.into())
     }
 }
@@ -414,6 +422,7 @@ pub struct SimulatedPlatformProfileTree {
 #[derive(Debug, Clone)]
 pub enum SimulatedEntry {
     Regular(Vec<u8>),
+    Absent,
     Partial { bytes_read: usize },
     Missing,
     PermissionDenied,
@@ -460,6 +469,7 @@ impl PlatformProfileByteSource for SimulatedPlatformProfileTree {
                     reason: reason.clone(),
                 })
             }
+            Some(SimulatedEntry::Absent) => Ok(PlatformProfileSourceRead::Absent),
             Some(SimulatedEntry::Partial { bytes_read }) => {
                 Ok(PlatformProfileSourceRead::Partial {
                     bytes_read: *bytes_read,
@@ -1349,6 +1359,34 @@ mod tests {
             PlatformProfileQuery::read_once(&inconsistent),
             Err(LinuxPlatformProfileError::Parse(
                 PlatformProfileError::ActiveNotAvailable { .. }
+            ))
+        ));
+    }
+
+    #[test]
+    fn simulated_absence_stays_distinct_from_acquisition_failure() {
+        let reader = LinuxPlatformProfileReader::new(
+            tree(SimulatedEntry::Absent, regular("balanced performance\n")),
+            MAXIMUM_SIZE,
+        );
+        let reading = PlatformProfileQuery::read_once(&reader).unwrap();
+        assert_eq!(reading.profile().raw.active, None);
+        assert_eq!(reading.profile().state, TelemetryState::Unavailable);
+        assert!(matches!(
+            reading.origin(),
+            LinuxPlatformProfileOrigin::StaticSimulation { .. }
+        ));
+
+        let failed = LinuxPlatformProfileReader::new(
+            tree(SimulatedEntry::Missing, regular("balanced performance\n")),
+            MAXIMUM_SIZE,
+        );
+        assert!(matches!(
+            PlatformProfileQuery::read_once(&failed),
+            Err(LinuxPlatformProfileError::Source(
+                PlatformProfileSourceError::Missing {
+                    entry: PlatformProfileEntry::Active
+                }
             ))
         ));
     }

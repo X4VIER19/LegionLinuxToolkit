@@ -32,7 +32,7 @@ La única lógica de apertura y validación debe seguir residiendo en
 `legion-linux`; `legion-core` permanece independiente de Linux, rutas y
 descriptores.
 
-### Estado de Fase 5C.2
+### Estado de Fases 5C.2 y 5C.3
 
 La Fase 5C.2 implementa la interfaz pública compartida
 `PlatformProfileQuery::read_once()` en `legion-linux`. El lector existente de
@@ -46,6 +46,16 @@ Las nuevas pruebas usan fuentes simuladas para verificar una lectura válida,
 ausencia, incoherencia y preservación de `StaticSimulation`. No introducen una
 fuente Linux nueva, una ruta configurable ni una forma de construir
 `LinuxReadOnly` desde fixtures.
+
+La Fase 5C.3 conecta el comando `legion-cli platform-profile` a esa misma
+interfaz, pero solo mediante `LinuxPlatformProfileReader` y un
+`SimulatedPlatformProfileTree` construido con escenarios embebidos de
+`legion-fixtures`. La CLI no recibe un proveedor, una ruta, una raíz ni una
+selección de origen: convierte el enum cerrado del escenario en bytes en
+memoria y llama una vez a `PlatformProfileQuery::read_once()`. Los datos
+ausentes se preservan como ausencia, no como cadena vacía ni error de origen;
+los errores de adquisición simulados siguen siendo distintos de los errores
+del adaptador. Toda salida de esta ruta conserva `StaticSimulation`.
 
 ```text
 CLI estable / GUI futura
@@ -253,7 +263,7 @@ debe seguir siendo puntual y explícita, como ocurrió con el primer hito.
 | --- | --- | --- |
 | 5C.1 (actual) | Diseño y registro de evidencia. | Sin cambios funcionales ni lecturas. |
 | 5C.2 (actual) | Interfaz `read_once()` y pruebas exclusivamente simuladas. | Sin proveedor real nuevo ni dependencia de `legion-cli` sobre sysfs. |
-| 5C.3 | Revisar el lector compartido y la política de procedencia. | Feature experimental sigue no predeterminada; sin ejecución real. |
+| 5C.3 (actual) | Integrar `legion-cli platform-profile` con la consulta compartida y escenarios embebidos. | Solo `StaticSimulation`; la CLI no puede construir el proveedor sysfs ni seleccionar rutas. |
 | 5C.4 | Proponer integración explícita de CLI/GUI y cambio estrecho de `AGENTS.md`. | Revisión de diff, autorización independiente y sin escritura. |
 | 5C.5 | Validación manual autorizada por entorno y decisión de estabilidad. | Cada lectura real se aprueba por separado hasta que se cambien las reglas. |
 | 5C.6 | Declaración de soporte o conservación como experimental. | Solo tras satisfacer criterios de aceptación y revisión de seguridad. |
