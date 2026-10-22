@@ -1,0 +1,3144 @@
+00005c Dynamic
+000080 Provider
+000094 WmiProv
+0000b4 Locale
+0000c4 MS\0x409
+0000e8 Description
+000100 Definition of Game list in intelligent mode
+000168 guid
+000174 {93A57CD3-BBC6-46AB-951D-31F17CC968A0}
+0001e0 InstanceName
+000230 CIMTYPE
+000240 string
+000264 Active
+00028c CIMTYPE
+00029c boolean
+0002c0 processname
+0002f0 WmiDataId
+000318 read
+000338 Description
+000350 process name
+00037c CIMTYPE
+00038c string
+0003b0 mode
+0003d4 WmiDataId
+0003fc read
+00041c Description
+000434 sub mode
+000458 CIMTYPE
+000468 string
+00048c __CLASS
+00049c LENOVO_INTELLIGENT_OP_LIST
+0004e8 __NAMESPACE
+000500 root\default
+00056c Dynamic
+000590 Provider
+0005a4 WmiProv
+0005c4 Locale
+0005d4 MS\0x409
+0005f8 Description
+000610 Definition of CPU OC parameter list
+000668 guid
+000674 {B7F3CA0A-ACDC-42D2-9217-77C6C628FBD2}
+0006e0 InstanceName
+000730 read
+000750 CIMTYPE
+000760 string
+000784 Active
+0007ac read
+0007cc CIMTYPE
+0007dc boolean
+000800 Tuneid
+000828 WmiDataId
+000850 read
+000870 Description
+000888 OC tune id.
+0008b0 CIMTYPE
+0008c0 uint32
+0008e4 DefaultValue
+000918 WmiDataId
+000940 read
+000960 Description
+000978 Default value.
+0009a8 CIMTYPE
+0009b8 uint32
+0009dc OCValue
+000a04 WmiDataId
+000a2c read
+000a4c Description
+000a64 OC Value.
+000a88 CIMTYPE
+000a98 uint32
+000abc MinValue
+000ae8 WmiDataId
+000b10 read
+000b30 Description
+000b48 Min Value.
+000b70 CIMTYPE
+000b80 uint32
+000ba4 MaxValue
+000bd0 WmiDataId
+000bf8 read
+000c18 Description
+000c30 Max Value.
+000c58 CIMTYPE
+000c68 uint32
+000c8c ScaleValue
+000cbc WmiDataId
+000ce4 read
+000d04 Description
+000d1c Scale Value.
+000d48 CIMTYPE
+000d58 uint32
+000d7c OCOrderid
+000da8 WmiDataId
+000dd0 read
+000df0 Description
+000e08 OC Order id.
+000e34 CIMTYPE
+000e44 uint32
+000e68 NOCOrderid
+000e98 WmiDataId
+000ec0 read
+000ee0 Description
+000ef8 NON-OC Order id.
+000f2c CIMTYPE
+000f3c uint32
+000f60 Interval
+000f8c WmiDataId
+000fb4 read
+000fd4 Description
+000fec Delay time in ms.
+001020 CIMTYPE
+001030 uint32
+001054 __CLASS
+001064 LENOVO_GAMEZONE_CPU_OC_DATA
+0010b0 __NAMESPACE
+0010c8 root\default
+001134 Dynamic
+001158 Provider
+00116c WmiProv
+00118c Locale
+00119c MS\0x409
+0011c0 Description
+0011d8 Definition of GPU OC parameter list
+001230 guid
+00123c {887B54E2-DDDC-4B2C-8B88-68A26A8835D0}
+0012a8 InstanceName
+0012f8 read
+001318 CIMTYPE
+001328 string
+00134c Active
+001374 read
+001394 CIMTYPE
+0013a4 boolean
+0013c8 PStateID
+0013f4 WmiDataId
+00141c read
+00143c Description
+001454 P-State ID.
+00147c CIMTYPE
+00148c uint32
+0014b0 ClockID
+0014d8 WmiDataId
+001500 read
+001520 Description
+001538 CLOCK ID.
+00155c CIMTYPE
+00156c uint32
+001590 defaultvalue
+0015c4 WmiDataId
+0015ec read
+00160c Description
+001624 Default value.
+001654 CIMTYPE
+001664 uint32
+001688 OCOffsetFreq
+0016bc WmiDataId
+0016e4 read
+001704 Description
+00171c OC Offset freqency.
+001754 CIMTYPE
+001764 uint32
+001788 OCMinOffset
+0017b8 WmiDataId
+0017e0 read
+001800 Description
+001818 OC Min offset value.
+001854 CIMTYPE
+001864 uint32
+001888 OCMaxOffset
+0018b8 WmiDataId
+0018e0 read
+001900 Description
+001918 OC Max offset value.
+001954 CIMTYPE
+001964 uint32
+001988 OCOffsetScale
+0019bc WmiDataId
+0019e4 read
+001a04 Description
+001a1c OC Offset Scale.
+001a50 CIMTYPE
+001a60 uint32
+001a84 OCOrderid
+001ab0 WmiDataId
+001ad8 read
+001af8 Description
+001b10 OC Order id.
+001b3c CIMTYPE
+001b4c uint32
+001b70 NOCOrderid
+001ba0 WmiDataId
+001bc8 read
+001be8 Description
+001c00 NON-OC Order id.
+001c34 CIMTYPE
+001c44 uint32
+001c68 Interval
+001c94 WmiDataId
+001cbc read
+001cdc Description
+001cf4 Delay time in ms.
+001d28 CIMTYPE
+001d38 uint32
+001d5c Capability
+001d8c WmiDataId
+001db4 read
+001dd4 Description
+001dec Capability
+001e14 CIMTYPE
+001e24 uint32
+001e48 __CLASS
+001e58 LENOVO_GAMEZONE_GPU_OC_DATA
+001ea4 __NAMESPACE
+001ebc root\default
+001f28 Dynamic
+001f4c Provider
+001f60 WmiProv
+001f80 Locale
+001f90 MS\0x409
+001fb4 Description
+001fcc LENOVO_GAMEZONE_DATA class
+002014 guid
+002020 {887B54E3-DDDC-4B2C-8B88-68A26A8835D0}
+00208c InstanceName
+0020dc read
+0020fc CIMTYPE
+00210c string
+002130 Active
+002158 read
+002178 CIMTYPE
+002188 boolean
+0021ac __CLASS
+0021bc LENOVO_GAMEZONE_DATA
+0021fc __NAMESPACE
+002214 root\default
+00224c GetIRTemp
+0022a0 Data
+0022e0 Description
+0022f8 IR temperature
+002344 CIMTYPE
+002354 uint32
+002378 __CLASS
+002388 __PARAMETERS
+0023c4 WmiMethodId
+0023f0 Implemented
+00241c Description
+002434 Get IR temp
+002460 GetThermalTableID
+0024c4 Data
+002504 Description
+00251c Get ThermalTable ID
+002570 CIMTYPE
+002580 uint32
+0025a4 __CLASS
+0025b4 __PARAMETERS
+0025f0 WmiMethodId
+00261c Implemented
+002648 Description
+002660 Get ThermalTable ID
+00269c SetThermalTableID
+002700 Data
+002740 Description
+002758 Set ThermalTable ID
+0027ac CIMTYPE
+0027bc uint32
+0027e0 __CLASS
+0027f0 __PARAMETERS
+00282c WmiMethodId
+002858 Implemented
+002884 Description
+00289c Set ThermalTable ID
+0028d8 IsSupportGpuOC
+002938 Data
+002978 Description
+002990 Is SupportGpu OverClock
+0029ec CIMTYPE
+0029fc uint32
+002a20 __CLASS
+002a30 __PARAMETERS
+002a6c WmiMethodId
+002a98 Implemented
+002ac4 Description
+002adc Is SupportGpu OverClock
+002b20 GetGpuGpsState
+002b80 Data
+002bc0 Description
+002bd8 Get GpuGpsState
+002c24 CIMTYPE
+002c34 uint32
+002c58 __CLASS
+002c68 __PARAMETERS
+002ca4 WmiMethodId
+002cd0 Implemented
+002cfc Description
+002d14 Get GpuGpsState
+002d48 SetGpuGpsState
+002da8 Data
+002de8 Description
+002e00 Set GpuGpsState
+002e4c CIMTYPE
+002e5c UINT32
+002e80 __CLASS
+002e90 __PARAMETERS
+002ecc WmiMethodId
+002ef8 Implemented
+002f24 Description
+002f3c Set GpuGpsState
+002f70 GetFanCount
+002fc8 Data
+003008 Description
+003020 Fan Count
+003060 CIMTYPE
+003070 UINT32
+003094 __CLASS
+0030a4 __PARAMETERS
+0030e0 WmiMethodId
+00310c Implemented
+003138 Description
+003150 Get Fan Count
+003180 GetFan1Speed
+0031dc Data
+00321c Description
+003234 Fan1 Speed
+003278 CIMTYPE
+003288 UINT32
+0032ac __CLASS
+0032bc __PARAMETERS
+0032f8 WmiMethodId
+003324 Implemented
+003350 Description
+003368 Get Fan1 Speed
+00339c GetFan2Speed
+0033f8 Data
+003438 Description
+003450 Fan2 Speed
+003494 CIMTYPE
+0034a4 UINT32
+0034c8 __CLASS
+0034d8 __PARAMETERS
+003514 WmiMethodId
+003540 Implemented
+00356c Description
+003584 Get Fan2 Speed
+0035b8 GetFanMaxSpeed
+003618 Data
+003658 Description
+003670 Fan Max Speed
+0036b8 CIMTYPE
+0036c8 UINT32
+0036ec __CLASS
+0036fc __PARAMETERS
+003738 WmiMethodId
+003764 Implemented
+003790 Description
+0037a8 Get Fan Max Speed
+0037e0 GetVersion
+003838 Data
+003878 Description
+003890 AslCode version
+0038dc CIMTYPE
+0038ec UINT32
+003910 __CLASS
+003920 __PARAMETERS
+00395c WmiMethodId
+003988 Implemented
+0039b4 Description
+0039cc Get AslCode Version
+003a08 IsSupportFanCooling
+003a70 Data
+003ab0 Description
+003ac8 Fan cooling capablity
+003b20 CIMTYPE
+003b30 UINT32
+003b54 __CLASS
+003b64 __PARAMETERS
+003ba0 WmiMethodId
+003bcc Implemented
+003bf8 Description
+003c10 Fan cooling capabilty
+003c50 SetFanCooling
+003cac Data
+003cec Description
+003d04 Set Fan cooling on/off
+003d60 CIMTYPE
+003d70 UINT32
+003d94 __CLASS
+003da4 __PARAMETERS
+003de0 WmiMethodId
+003e0c Implemented
+003e38 Description
+003e50 Set Fan cooling on/off
+003e94 IsSupportCpuOC
+003ef4 Data
+003f34 Description
+003f4c cpu oc capability
+003f9c CIMTYPE
+003fac UINT32
+003fd0 __CLASS
+003fe0 __PARAMETERS
+00401c WmiMethodId
+004048 Implemented
+004074 Description
+00408c cpu oc capability
+0040c4 IsBIOSSupportOC
+004124 Data
+004164 Description
+00417c bios has overclock capability
+0041e4 CIMTYPE
+0041f4 UINT32
+004218 __CLASS
+004228 __PARAMETERS
+004264 WmiMethodId
+004290 Implemented
+0042bc Description
+0042d4 bios has overclock capability
+004324 SetBIOSOC
+004378 Data
+0043b8 Description
+0043d0 enble or disable overclock in bios
+004444 CIMTYPE
+004454 UINT32
+004478 __CLASS
+004488 __PARAMETERS
+0044c4 WmiMethodId
+0044f0 Implemented
+00451c Description
+004534 enble or disable overclock in bios
+004590 GetTriggerTemperatureValue
+004608 Data
+004648 Description
+004660 Get temperature change trigger temp value
+0046e0 CIMTYPE
+0046f0 UINT32
+004714 __CLASS
+004724 __PARAMETERS
+004760 WmiMethodId
+00478c Implemented
+0047b8 Description
+0047d0 Get temperature change trigger temp value
+004838 GetCPUTemp
+004890 Data
+0048d0 Description
+0048e8 Get CPU temperature
+00493c CIMTYPE
+00494c UINT32
+004970 __CLASS
+004980 __PARAMETERS
+0049bc WmiMethodId
+0049e8 Implemented
+004a14 Description
+004a2c Get CPU temperature
+004a68 GetGPUTemp
+004ac0 Data
+004b00 Description
+004b18 Get GPU temperature
+004b6c CIMTYPE
+004b7c UINT32
+004ba0 __CLASS
+004bb0 __PARAMETERS
+004bec WmiMethodId
+004c18 Implemented
+004c44 Description
+004c5c Get GPU temperature
+004c98 GetFanCoolingStatus
+004d00 Data
+004d40 Description
+004d58 Get Fan cooling on/off status
+004dc0 CIMTYPE
+004dd0 UINT32
+004df4 __CLASS
+004e04 __PARAMETERS
+004e40 WmiMethodId
+004e6c Implemented
+004e98 Description
+004eb0 Get Fan cooling on/off status
+004f00 IsSupportDisableWinKey
+004f70 Data
+004fb0 Description
+004fc8 EC support disable windows key capability
+005048 CIMTYPE
+005058 UINT32
+00507c __CLASS
+00508c __PARAMETERS
+0050c8 WmiMethodId
+0050f4 Implemented
+005120 Description
+005138 EC support disable windows key capability
+0051a0 SetWinKeyStatus
+005200 Data
+005240 Description
+005258 Set windows key disable/enable
+0052c4 CIMTYPE
+0052d4 UINT32
+0052f8 __CLASS
+005308 __PARAMETERS
+005344 WmiMethodId
+005370 Implemented
+00539c Description
+0053b4 Set windows key disable/enable
+005408 GetWinKeyStatus
+005468 Data
+0054a8 Description
+0054c0 Get windows key disable/enable status
+005538 CIMTYPE
+005548 UINT32
+00556c __CLASS
+00557c __PARAMETERS
+0055b8 WmiMethodId
+0055e4 Implemented
+005610 Description
+005628 Get windows key disable/enable status
+005688 IsSupportDisableTP
+0056f0 Data
+005730 Description
+005748 EC support disable touchpad capability
+0057c4 CIMTYPE
+0057d4 UINT32
+0057f8 __CLASS
+005808 __PARAMETERS
+005844 WmiMethodId
+005870 Implemented
+00589c Description
+0058b4 EC support disable touchpad capability
+005918 SetTPStatus
+005970 Data
+0059b0 Description
+0059c8 Set touchpad disable/enable
+005a2c CIMTYPE
+005a3c UINT32
+005a60 __CLASS
+005a70 __PARAMETERS
+005aac WmiMethodId
+005ad8 Implemented
+005b04 Description
+005b1c Set touchpad disable/enable
+005b68 GetTPStatus
+005bc0 Data
+005c00 Description
+005c18 Get touchpad disable/enable status
+005c8c CIMTYPE
+005c9c UINT32
+005cc0 __CLASS
+005cd0 __PARAMETERS
+005d0c WmiMethodId
+005d38 Implemented
+005d64 Description
+005d7c Get touchpad disable/enable status
+005dd8 GetGPUPow
+005e2c Data
+005e6c Description
+005e84 Get GPU normal mode max TDP(W)
+005ef0 CIMTYPE
+005f00 UINT32
+005f24 __CLASS
+005f34 __PARAMETERS
+005f70 WmiMethodId
+005f9c Implemented
+005fc8 Description
+005fe0 Get GPU normal mode max TDP(W)
+006034 GetGPUOCPow
+00608c Data
+0060cc Description
+0060e4 Get GPU OC mode max TDP(W)
+006148 CIMTYPE
+006158 UINT32
+00617c __CLASS
+00618c __PARAMETERS
+0061c8 WmiMethodId
+0061f4 Implemented
+006220 Description
+006238 Get GPU OC mode max TDP(W)
+006284 GetGPUOCType
+0062e0 Data
+006320 Description
+006338 Get GPU OC type
+006384 CIMTYPE
+006394 UINT32
+0063b8 __CLASS
+0063c8 __PARAMETERS
+006404 WmiMethodId
+006430 Implemented
+00645c Description
+006474 Get GPU OC type
+0064a8 GetKeyboardfeaturelist
+006518 Data
+006558 Description
+006570 Get Keyboard feature list
+0065d0 CIMTYPE
+0065e0 UINT32
+006604 __CLASS
+006614 __PARAMETERS
+006650 WmiMethodId
+00667c Implemented
+0066a8 Description
+0066c0 Get Keyboard feature list
+006708 GetMemoryOCInfo
+006768 Data
+0067a8 Description
+0067c0 Get Memory OC Information
+006820 CIMTYPE
+006830 UINT32
+006854 __CLASS
+006864 __PARAMETERS
+0068a0 WmiMethodId
+0068cc Implemented
+0068f8 Description
+006910 Get Memory OC Information
+006958 IsSupportWaterCooling
+0069c4 Data
+006a04 Description
+006a1c Water Cooling feature capability
+006a8c CIMTYPE
+006a9c UINT32
+006ac0 __CLASS
+006ad0 __PARAMETERS
+006b0c WmiMethodId
+006b38 Implemented
+006b64 Description
+006b7c Water Cooling feature capability
+006bd4 SetWaterCoolingStatus
+006c40 Data
+006c80 Description
+006c98 Set Water Cooling status
+006cf8 CIMTYPE
+006d08 UINT32
+006d2c __CLASS
+006d3c __PARAMETERS
+006d78 WmiMethodId
+006da4 Implemented
+006dd0 Description
+006de8 Set Water Cooling status
+006e30 GetWaterCoolingStatus
+006e9c Data
+006edc Description
+006ef4 Get Water Cooling status
+006f54 CIMTYPE
+006f64 UINT32
+006f88 __CLASS
+006f98 __PARAMETERS
+006fd4 WmiMethodId
+007000 Implemented
+00702c Description
+007044 Get Water Cooling status
+00708c IsSupportLightingFeature
+007100 Data
+007140 Description
+007158 Lighting feature capability
+0071bc CIMTYPE
+0071cc UINT32
+0071f0 __CLASS
+007200 __PARAMETERS
+00723c WmiMethodId
+007268 Implemented
+007294 Description
+0072ac Lighting feature capability
+0072f8 SetKeyboardLight
+00735c Data
+00739c Description
+0073b4 keyboard light off or on switch
+007420 CIMTYPE
+007430 UINT32
+007454 __CLASS
+007464 __PARAMETERS
+0074a0 WmiMethodId
+0074cc Implemented
+0074f8 Description
+007510 Set keyboard light off or on to max
+00756c GetKeyboardLight
+0075d0 Data
+007610 Description
+007628 Get keyboard light on/off status
+007698 CIMTYPE
+0076a8 UINT32
+0076cc __CLASS
+0076dc __PARAMETERS
+007718 WmiMethodId
+007744 Implemented
+007770 Description
+007788 Get keyboard light on/off status
+0077e0 GetMacrokeyScancode
+007880 Description
+007898 Macrokey index
+0078e0 CIMTYPE
+0078f0 UINT32
+007912 __CLASS
+007922 __PARAMETERS
+007974 scancode
+0079bc Description
+0079d4 Scan code
+007a14 CIMTYPE
+007a24 UINT32
+007a48 __CLASS
+007a58 __PARAMETERS
+007a94 WmiMethodId
+007ac0 Implemented
+007aec Description
+007b04 Get Macrokey scan code
+007b48 GetMacrokeyCount
+007bac Data
+007bec Description
+007c04 Macrokey count
+007c50 CIMTYPE
+007c60 UINT32
+007c84 __CLASS
+007c94 __PARAMETERS
+007cd0 WmiMethodId
+007cfc Implemented
+007d28 Description
+007d40 Get Macrokey count
+007d7c IsSupportGSync
+007ddc Data
+007e1c Description
+007e34 Support G-Sync feature
+007e90 CIMTYPE
+007ea0 UINT32
+007ec4 __CLASS
+007ed4 __PARAMETERS
+007f10 WmiMethodId
+007f3c Implemented
+007f68 Description
+007f80 Support G-Sync feature
+007fc4 GetGSyncStatus
+008024 Data
+008064 Description
+00807c Get G-Sync Statust
+0080d0 CIMTYPE
+0080e0 UINT32
+008104 __CLASS
+008114 __PARAMETERS
+008150 WmiMethodId
+00817c Implemented
+0081a8 Description
+0081c0 Get G-Sync Statust
+0081fc SetGSyncStatus
+00825c Data
+00829c Description
+0082b4 Set G-Sync Statust
+008308 CIMTYPE
+008318 UINT32
+00833c __CLASS
+00834c __PARAMETERS
+008388 WmiMethodId
+0083b4 Implemented
+0083e0 Description
+0083f8 Set G-Sync Statust
+008434 IsSupportSmartFan
+008498 Data
+0084d8 Description
+0084f0 Support Smart Fan feature
+008550 CIMTYPE
+008560 UINT32
+008584 __CLASS
+008594 __PARAMETERS
+0085d0 WmiMethodId
+0085fc Implemented
+008628 Description
+008640 Support Smart Fan feature
+008688 SetSmartFanMode
+0086e8 Data
+008728 Description
+008740 Set Smart Fan Mode
+008794 CIMTYPE
+0087a4 UINT32
+0087c8 __CLASS
+0087d8 __PARAMETERS
+008814 WmiMethodId
+008840 Implemented
+00886c Description
+008884 Set Smart Fan Mode
+0088c0 GetSmartFanMode
+008920 Data
+008960 Description
+008978 Get Smart Fan Mode
+0089cc CIMTYPE
+0089dc UINT32
+008a00 __CLASS
+008a10 __PARAMETERS
+008a4c WmiMethodId
+008a78 Implemented
+008aa4 Description
+008abc Get Smart Fan Mode
+008af8 GetSmartFanSetting
+008b60 Data
+008ba0 Description
+008bb8 Get Smart Setting Mode
+008c14 CIMTYPE
+008c24 UINT32
+008c48 __CLASS
+008c58 __PARAMETERS
+008c94 WmiMethodId
+008cc0 Implemented
+008cec Description
+008d04 Get Smart Fan Setting Mode
+008d50 GetPowerChargeMode
+008db8 Data
+008df8 Description
+008e10 Get Power Charge Mode
+008e68 CIMTYPE
+008e78 UINT32
+008e9c __CLASS
+008eac __PARAMETERS
+008ee8 WmiMethodId
+008f14 Implemented
+008f40 Description
+008f58 Get Power Charge Mode
+008f98 GetProductInfo
+008ff8 Data
+009038 Description
+009050 Get Gaming Product Info
+0090ac CIMTYPE
+0090bc UINT32
+0090e0 __CLASS
+0090f0 __PARAMETERS
+00912c WmiMethodId
+009158 Implemented
+009184 Description
+00919c Get Gaming Product Info
+0091e0 IsSupportOD
+009238 Data
+009278 Description
+009290 Over Drive feature capability
+0092f8 CIMTYPE
+009308 UINT32
+00932c __CLASS
+00933c __PARAMETERS
+009378 WmiMethodId
+0093a4 Implemented
+0093d0 Description
+0093e8 Over Drive feature capability
+009438 GetODStatus
+009490 Data
+0094d0 Description
+0094e8 Get Over Drive status
+009540 CIMTYPE
+009550 UINT32
+009574 __CLASS
+009584 __PARAMETERS
+0095c0 WmiMethodId
+0095ec Implemented
+009618 Description
+009630 Get Over Drive status
+009670 SetODStatus
+0096c8 Data
+009708 Description
+009720 Set Over Drive status
+009778 CIMTYPE
+009788 UINT32
+0097ac __CLASS
+0097bc __PARAMETERS
+0097f8 WmiMethodId
+009824 Implemented
+009850 Description
+009868 Set Over Drive status
+0098a8 SetLightControlOwner
+009914 Data
+009954 Description
+00996c Set Light Control Owner
+0099c8 CIMTYPE
+0099d8 UINT32
+0099fc __CLASS
+009a0c __PARAMETERS
+009a48 WmiMethodId
+009a74 Implemented
+009aa0 Description
+009ab8 Set Light Control Owner
+009afc SetDDSControlOwner
+009b64 Data
+009ba4 Description
+009bbc Set DDS Control Owner
+009c14 CIMTYPE
+009c24 UINT32
+009c48 __CLASS
+009c58 __PARAMETERS
+009c94 WmiMethodId
+009cc0 Implemented
+009cec Description
+009d04 Set DDS Control Owner
+009d44 IsRestoreOCValue
+009de0 Description
+009df8 Clean this flag
+009e42 CIMTYPE
+009e52 UINT32
+009e74 __CLASS
+009e84 __PARAMETERS
+009ed6 Data
+009f16 Description
+009f2e Resotre oc value flag
+009f86 CIMTYPE
+009f96 UINT32
+009fba __CLASS
+009fca __PARAMETERS
+00a006 WmiMethodId
+00a032 Implemented
+00a05e Description
+00a076 Get the flag of restore OC value
+00a0ce GetThermalMode
+00a12e Data
+00a16e Description
+00a186 Real Thremal Mode
+00a1d6 CIMTYPE
+00a1e6 UINT32
+00a20a __CLASS
+00a21a __PARAMETERS
+00a256 WmiMethodId
+00a282 Implemented
+00a2ae Description
+00a2c6 Get Real Thremal Mode
+00a306 GetBIOSOCMode
+00a362 Data
+00a3a2 Description
+00a3ba OC Mode
+00a3f6 CIMTYPE
+00a406 UINT32
+00a42a __CLASS
+00a43a __PARAMETERS
+00a476 WmiMethodId
+00a4a2 Implemented
+00a4ce Description
+00a4e6 Get the OC switch status in BIOS
+00a53e SetIntelligentSubMode
+00a5aa Data
+00a5ea Description
+00a602 mode
+00a63a CIMTYPE
+00a64a UINT32
+00a66e __CLASS
+00a67e __PARAMETERS
+00a6ba WmiMethodId
+00a6e6 Implemented
+00a712 Description
+00a72a Set the current mode in Intelligent Mode
+00a792 GetIntelligentSubMode
+00a7fe Data
+00a83e Description
+00a856 mode
+00a88e CIMTYPE
+00a89e UINT32
+00a8c2 __CLASS
+00a8d2 __PARAMETERS
+00a90e WmiMethodId
+00a93a Implemented
+00a966 Description
+00a97e Get the current mode in Intelligent Mode
+00a9e6 GetHardwareInfoSupportVersion
+00aa62 Data
+00aaa2 Description
+00aaba version
+00aaf6 CIMTYPE
+00ab06 UINT32
+00ab2a __CLASS
+00ab3a __PARAMETERS
+00ab76 WmiMethodId
+00aba2 Implemented
+00abce Description
+00abe6 Get hardware info support version
+00ac3e GetCpuFrequency
+00ac9e Data
+00acde Description
+00acf6 frequency
+00ad36 CIMTYPE
+00ad46 UINT32
+00ad6a __CLASS
+00ad7a __PARAMETERS
+00adb6 WmiMethodId
+00ade2 Implemented
+00ae0e Description
+00ae26 Get Cpu core 0 max frequency
+00ae76 GetLearningProfileCount
+00aee6 Data
+00af26 Description
+00af3e profile count
+00af86 CIMTYPE
+00af96 UINT32
+00afba __CLASS
+00afca __PARAMETERS
+00b006 WmiMethodId
+00b032 Implemented
+00b05e Description
+00b076 Get Total count of Learning Profile
+00b0d2 IsACFitForOC
+00b12e Data
+00b16e Description
+00b186 AC check result
+00b1d2 CIMTYPE
+00b1e2 UINT32
+00b206 __CLASS
+00b216 __PARAMETERS
+00b252 WmiMethodId
+00b27e Implemented
+00b2aa Description
+00b2c2 Check the Adapter type fit for OC
+00b31a IsSupportIGPUMode
+00b37e Data
+00b3be Description
+00b3d6 IGPU modes
+00b41a CIMTYPE
+00b42a UINT32
+00b44e __CLASS
+00b45e __PARAMETERS
+00b49a WmiMethodId
+00b4c6 Implemented
+00b4f2 Description
+00b50a Is support IGPU mode
+00b54a GetIGPUModeStatus
+00b5ae Data
+00b5ee Description
+00b606 IGPU Mode Status
+00b656 CIMTYPE
+00b666 UINT32
+00b68a __CLASS
+00b69a __PARAMETERS
+00b6d6 WmiMethodId
+00b702 Implemented
+00b72e Description
+00b746 Get IGPU Mode Status
+00b786 SetIGPUModeStatus
+00b7ea mode
+00b824 Description
+00b83c IGPU Mode
+00b87a CIMTYPE
+00b88a UINT32
+00b8ac __CLASS
+00b8bc __PARAMETERS
+00b90e Data
+00b94e Description
+00b966 return code
+00b9aa CIMTYPE
+00b9ba UINT32
+00b9de __CLASS
+00b9ee __PARAMETERS
+00ba2a WmiMethodId
+00ba56 Implemented
+00ba82 Description
+00ba9a Set IGPU Mode
+00baca NotifyDGPUStatus
+00bb2e status
+00bb6c Description
+00bb84 DGPU status
+00bbc6 CIMTYPE
+00bbd6 UINT32
+00bbf8 __CLASS
+00bc08 __PARAMETERS
+00bc5a Data
+00bc9a Description
+00bcb2 return code
+00bcf6 CIMTYPE
+00bd06 UINT32
+00bd2a __CLASS
+00bd3a __PARAMETERS
+00bd76 WmiMethodId
+00bda2 Implemented
+00bdce Description
+00bde6 Notify DGPU Status
+00be22 IsChangedYLog
+00be7e Data
+00bebe Description
+00bed6 Is changed Y Log
+00bf26 CIMTYPE
+00bf36 UINT32
+00bf5a __CLASS
+00bf6a __PARAMETERS
+00bfa6 WmiMethodId
+00bfd2 Implemented
+00bffe Description
+00c016 Is changed Y log
+00c04e GetDGPUHWId
+00c0a6 Data
+00c0e6 Description
+00c0fe Get DGPU Hardware ID
+00c156 CIMTYPE
+00c166 string
+00c18a __CLASS
+00c19a __PARAMETERS
+00c1d6 WmiMethodId
+00c202 Implemented
+00c22e Description
+00c246 Get DGPU Hardwawre ID
+00c2ba Dynamic
+00c2de Provider
+00c2f2 WmiProv
+00c312 Locale
+00c322 MS\0x409
+00c346 Description
+00c35e Temperature change event 
+00c3a2 guid
+00c3ae {BFD42481-AEE3-4501-A107-AFB68425C5F8}
+00c41a InstanceName
+00c46a read
+00c48a CIMTYPE
+00c49a string
+00c4be Active
+00c4e6 read
+00c506 CIMTYPE
+00c516 boolean
+00c53a TempChangeEventId
+00c576 WmiDataId
+00c59e read
+00c5be Description
+00c5d6 Temperature change eventid
+00c61e CIMTYPE
+00c62e uint32
+00c652 __CLASS
+00c662 LENOVO_GAMEZONE_TEMP_EVENT
+00c6ae __NAMESPACE
+00c6c6 root\default
+00c6f6 __SUPERCLASS
+00c712 WMIEvent
+00c776 Dynamic
+00c79a Provider
+00c7ae WmiProv
+00c7ce Locale
+00c7de MS\0x409
+00c802 Description
+00c81a Gpu Temperature change event 
+00c866 guid
+00c872 {BFD42481-AEE3-4502-A107-AFB68425C5F8}
+00c8de InstanceName
+00c92e read
+00c94e CIMTYPE
+00c95e string
+00c982 Active
+00c9aa read
+00c9ca CIMTYPE
+00c9da boolean
+00c9fe GpuTempChangeEventId
+00ca42 WmiDataId
+00ca6a read
+00ca8a Description
+00caa2 Gpu Temperature change eventid
+00caf2 CIMTYPE
+00cb02 uint32
+00cb26 __CLASS
+00cb36 LENOVO_GAMEZONE_GPU_TEMP_EVENT
+00cb8a __NAMESPACE
+00cba2 root\default
+00cbd2 __SUPERCLASS
+00cbee WMIEvent
+00cc52 Dynamic
+00cc76 Provider
+00cc8a WmiProv
+00ccaa Locale
+00ccba MS\0x409
+00ccde Description
+00ccf6 OC button pressed event
+00cd36 guid
+00cd42 {D062906B-12D4-4510-999D-4831EE80E985}
+00cdae InstanceName
+00cdfe read
+00ce1e CIMTYPE
+00ce2e string
+00ce52 Active
+00ce7a read
+00ce9a CIMTYPE
+00ceaa boolean
+00cece OCButtonValue
+00cf02 WmiDataId
+00cf2a read
+00cf4a Description
+00cf62 OC button event
+00cf92 CIMTYPE
+00cfa2 uint32
+00cfc6 __CLASS
+00cfd6 LENOVO_GAMEZONE_OC_EVENT
+00d01e __NAMESPACE
+00d036 root\default
+00d066 __SUPERCLASS
+00d082 WMIEvent
+00d0e6 Dynamic
+00d10a Provider
+00d11e WmiProv
+00d13e Locale
+00d14e MS\0x409
+00d172 Description
+00d18a Fancooling finish event
+00d1ca guid
+00d1d6 {BC72A435-E8C1-4275-B3E2-D8B8074ABA59}
+00d242 InstanceName
+00d292 read
+00d2b2 CIMTYPE
+00d2c2 string
+00d2e6 Active
+00d30e read
+00d32e CIMTYPE
+00d33e boolean
+00d362 EventId
+00d38a WmiDataId
+00d3b2 read
+00d3d2 Description
+00d3ea Fancooling clean finish event
+00d436 CIMTYPE
+00d446 uint32
+00d46a __CLASS
+00d47a LENOVO_GAMEZONE_FAN_COOLING_EVENT
+00d4d2 __NAMESPACE
+00d4ea root\default
+00d51a __SUPERCLASS
+00d536 WMIEvent
+00d59a Dynamic
+00d5be Provider
+00d5d2 WmiProv
+00d5f2 Locale
+00d602 MS\0x409
+00d626 Description
+00d63e Key lock status change event
+00d68a guid
+00d696 {10AFC6D9-EA8B-4590-A2E7-1CD3C84BB4B1}
+00d702 InstanceName
+00d752 read
+00d772 CIMTYPE
+00d782 string
+00d7a6 Active
+00d7ce read
+00d7ee CIMTYPE
+00d7fe boolean
+00d822 KeyLockState
+00d856 WmiDataId
+00d87e read
+00d89e Description
+00d8b6 Key lock status change event
+00d902 CIMTYPE
+00d912 uint32
+00d936 __CLASS
+00d946 LENOVO_GAMEZONE_KEYLOCK_STATUS_EVENT
+00d9a6 __NAMESPACE
+00d9be root\default
+00d9ee __SUPERCLASS
+00da0a WMIEvent
+00da6e Dynamic
+00da92 Provider
+00daa6 WmiProv
+00dac6 Locale
+00dad6 MS\0x409
+00dafa Description
+00db12 Smart Fan mode change event
+00db5a guid
+00db66 {D320289E-8FEA-41E0-86F9-611D83151B5F}
+00dbd2 InstanceName
+00dc22 read
+00dc42 CIMTYPE
+00dc52 string
+00dc76 Active
+00dc9e read
+00dcbe CIMTYPE
+00dcce boolean
+00dcf2 mode
+00dd16 WmiDataId
+00dd3e read
+00dd5e Description
+00dd76 Smart Fan Mode change event
+00ddbe CIMTYPE
+00ddce uint32
+00ddf2 version
+00de1a WmiDataId
+00de42 read
+00de62 Description
+00de7a version of FN+Q
+00deaa CIMTYPE
+00deba uint32
+00dede __CLASS
+00deee LENOVO_GAMEZONE_SMART_FAN_MODE_EVENT
+00df4e __NAMESPACE
+00df66 root\default
+00df96 __SUPERCLASS
+00dfb2 WMIEvent
+00e016 Dynamic
+00e03a Provider
+00e04e WmiProv
+00e06e Locale
+00e07e MS\0x409
+00e0a2 Description
+00e0ba Smart Fan setting mode change event
+00e112 guid
+00e11e {D320289E-8FEA-41E1-86F9-611D83151B5F}
+00e18a InstanceName
+00e1da read
+00e1fa CIMTYPE
+00e20a string
+00e22e Active
+00e256 read
+00e276 CIMTYPE
+00e286 boolean
+00e2aa mode
+00e2ce WmiDataId
+00e2f6 read
+00e316 Description
+00e32e Smart Fan Setting mode change event
+00e386 CIMTYPE
+00e396 uint32
+00e3ba __CLASS
+00e3ca LENOVO_GAMEZONE_SMART_FAN_SETTING_EVENT
+00e42e __NAMESPACE
+00e446 root\default
+00e476 __SUPERCLASS
+00e492 WMIEvent
+00e4f6 Dynamic
+00e51a Provider
+00e52e WmiProv
+00e54e Locale
+00e55e MS\0x409
+00e582 Description
+00e59a POWER CHARGE MODE Change EVENT
+00e5ea guid
+00e5f6 {D320289E-8FEA-41E0-86F9-711D83151B5F}
+00e662 InstanceName
+00e6b2 read
+00e6d2 CIMTYPE
+00e6e2 string
+00e706 Active
+00e72e read
+00e74e CIMTYPE
+00e75e boolean
+00e782 mode
+00e7a6 WmiDataId
+00e7ce read
+00e7ee Description
+00e806 POWER CHARGE MODE Change EVENT
+00e856 CIMTYPE
+00e866 uint32
+00e88a __CLASS
+00e89a LENOVO_GAMEZONE_POWER_CHARGE_MODE_EVENT
+00e8fe __NAMESPACE
+00e916 root\default
+00e946 __SUPERCLASS
+00e962 WMIEvent
+00e9c6 Dynamic
+00e9ea Provider
+00e9fe WmiProv
+00ea1e Locale
+00ea2e MS\0x409
+00ea52 Description
+00ea6a Fn+Space click event, light profile change event
+00eade guid
+00eaea {D320289E-8FEA-41E0-86F9-811D83151B5F}
+00eb56 InstanceName
+00eba6 read
+00ebc6 CIMTYPE
+00ebd6 string
+00ebfa Active
+00ec22 read
+00ec42 CIMTYPE
+00ec52 boolean
+00ec76 EventId
+00ec9e WmiDataId
+00ecc6 read
+00ece6 Description
+00ecfe Light profile change event
+00ed46 CIMTYPE
+00ed56 uint32
+00ed7a __CLASS
+00ed8a LENOVO_GAMEZONE_LIGHT_PROFILE_CHANGE_EVENT
+00edf6 __NAMESPACE
+00ee0e root\default
+00ee3e __SUPERCLASS
+00ee5a WMIEvent
+00eebe Dynamic
+00eee2 Provider
+00eef6 WmiProv
+00ef16 Locale
+00ef26 MS\0x409
+00ef4a Description
+00ef62 Thermal Mode Real Mode change event
+00efba guid
+00efc6 {D320289E-8FEA-41E0-86F9-911D83151B5F}
+00f032 InstanceName
+00f082 read
+00f0a2 CIMTYPE
+00f0b2 string
+00f0d6 Active
+00f0fe read
+00f11e CIMTYPE
+00f12e boolean
+00f152 mode
+00f176 WmiDataId
+00f19e read
+00f1be Description
+00f1d6 Thermal Mode Real Mode
+00f216 CIMTYPE
+00f226 uint32
+00f24a __CLASS
+00f25a LENOVO_GAMEZONE_THERMAL_MODE_EVENT
+00f2b6 __NAMESPACE
+00f2ce root\default
+00f2fe __SUPERCLASS
+00f31a WMIEvent
+00f37e Dynamic
+00f3a2 Provider
+00f3b6 WmiProv
+00f3d6 Locale
+00f3e6 MS\0x409
+00f40a Description
+00f422 LENOVO_PANEL_METHOD class
+00f466 guid
+00f472 {e5edffbf-e822-4bbe-8650-c07b8bae4c54}
+00f4de InstanceName
+00f52e read
+00f54e CIMTYPE
+00f55e string
+00f582 Active
+00f5aa read
+00f5ca CIMTYPE
+00f5da boolean
+00f5fe __CLASS
+00f60e LENOVO_PANEL_METHOD
+00f64a __NAMESPACE
+00f662 root\default
+00f69a Panel_Get_Support_Status
+00f70e Support_Status
+00f77e CIMTYPE
+00f78e uint32
+00f7b2 __CLASS
+00f7c2 __PARAMETERS
+00f7fe WmiMethodId
+00f82a Implemented
+00f856 Description
+00f86e Get Panel Support Functions
+00f8ba Panel_Get_Status
+00f91e Status
+00f97e CIMTYPE
+00f98e uint32
+00f9b2 __CLASS
+00f9c2 __PARAMETERS
+00f9fe WmiMethodId
+00fa2a Implemented
+00fa56 Description
+00fa6e Get Panel Functions Status
+00faba Panel_Set_Status
+00fb1e Status
+00fb7e CIMTYPE
+00fb8e uint32
+00fbb2 __CLASS
+00fbc2 __PARAMETERS
+00fbfe WmiMethodId
+00fc2a Implemented
+00fc56 Description
+00fc6e Set Panel Functions Status
+00fcba Panel_Get_Low_Latency_Mode
+00fd32 mode
+00fd8e CIMTYPE
+00fd9e uint32
+00fdc2 __CLASS
+00fdd2 __PARAMETERS
+00fe0e WmiMethodId
+00fe3a Implemented
+00fe66 Description
+00fe7e Get Panel Low Latency Mode
+00feca Panel_Set_Low_Latency_Mode
+00ff42 mode
+00ff9e CIMTYPE
+00ffae uint32
+00ffd2 __CLASS
+00ffe2 __PARAMETERS
+01001e WmiMethodId
+01004a Implemented
+010076 Description
+01008e Set Panel Low Latency Mode
+0100da Panel_Get_PIP_Info
+010142 PosX
+01019e CIMTYPE
+0101ae uint32
+0101d2 PosY
+01022e CIMTYPE
+01023e uint32
+010262 SizeX
+0102be CIMTYPE
+0102ce uint32
+0102f2 SizeY
+01034e CIMTYPE
+01035e uint32
+010382 __CLASS
+010392 __PARAMETERS
+0103ce WmiMethodId
+0103fa Implemented
+010426 Description
+01043e Get Panel PIP Info
+01047a Panel_Set_PIP_Info
+0104e2 PosX
+01053e CIMTYPE
+01054e uint32
+010572 PosY
+0105ce CIMTYPE
+0105de uint32
+010602 SizeX
+01065e CIMTYPE
+01066e uint32
+010692 SizeY
+0106ee CIMTYPE
+0106fe uint32
+010722 __CLASS
+010732 __PARAMETERS
+01076e WmiMethodId
+01079a Implemented
+0107c6 Description
+0107de Set Panel PIP Info
+01081a Panel_Get_Game_Aid_FPS_Display_Pos
+0108a2 PosX
+0108fe CIMTYPE
+01090e uint32
+010932 PosY
+01098e CIMTYPE
+01099e uint32
+0109c2 __CLASS
+0109d2 __PARAMETERS
+010a0e WmiMethodId
+010a3a Implemented
+010a66 Description
+010a7e Get Panel Game Aid FPS Display
+010ad2 Panel_Set_Game_Aid_FPS_Display_Pos
+010b5a PosX
+010bb6 CIMTYPE
+010bc6 uint32
+010bea PosY
+010c46 CIMTYPE
+010c56 uint32
+010c7a __CLASS
+010c8a __PARAMETERS
+010cc6 WmiMethodId
+010cf2 Implemented
+010d1e Description
+010d36 Set Panel Game Aid FPS Display
+010d8a Panel_Get_Game_Aid_FPS
+010dfa CurrentFPS
+010e62 CIMTYPE
+010e72 uint32
+010e96 AvgFPS
+010ef6 CIMTYPE
+010f06 uint32
+010f2a MaxFPS
+010f8a CIMTYPE
+010f9a uint32
+010fbe MinFPS
+01101e CIMTYPE
+01102e uint32
+011052 __CLASS
+011062 __PARAMETERS
+01109e WmiMethodId
+0110ca Implemented
+0110f6 Description
+01110e Set Panel Game Aid FPS Display
+011162 Panel_Get_Game_Aid_Sight_Mode
+0111de mode
+01123a CIMTYPE
+01124a uint32
+01126e __CLASS
+01127e __PARAMETERS
+0112ba WmiMethodId
+0112e6 Implemented
+011312 Description
+01132a Get Panel Game Aid Sight Mode
+01137a Panel_Set_Game_Aid_Sight_Mode
+0113f6 mode
+011452 CIMTYPE
+011462 uint32
+011486 __CLASS
+011496 __PARAMETERS
+0114d2 WmiMethodId
+0114fe Implemented
+01152a Description
+011542 Set Panel Game Aid Sight Mode
+011592 Panel_Get_Game_Aid_Timer_Info
+01160e Start
+01166a CIMTYPE
+01167a uint32
+0116f6 CIMTYPE
+011706 uint32
+01172a Clear
+011786 CIMTYPE
+011796 uint32
+0117ba __CLASS
+0117ca __PARAMETERS
+011806 WmiMethodId
+011832 Implemented
+01185e Description
+011876 Get Panel Game Aid Timer Info
+0118c6 Panel_Set_Game_Aid_Timer_Info
+011942 Start
+01199e CIMTYPE
+0119ae uint32
+011a2a CIMTYPE
+011a3a uint32
+011a5e Clear
+011aba CIMTYPE
+011aca uint32
+011aee __CLASS
+011afe __PARAMETERS
+011b3a WmiMethodId
+011b66 Implemented
+011b92 Description
+011baa Set Panel Game Aid Timer Info
+011bfa Panel_Get_Game_Aid_Countdown_Info
+011c7e time
+011cda CIMTYPE
+011cea uint32
+011d0e __CLASS
+011d1e __PARAMETERS
+011d5a WmiMethodId
+011d86 Implemented
+011db2 Description
+011dca Get Panel Game Aid Countdown Timer Info
+011e2e Panel_Set_Game_Aid_Countdown_Info
+011eb2 time
+011f0e CIMTYPE
+011f1e uint32
+011f42 __CLASS
+011f52 __PARAMETERS
+011f8e WmiMethodId
+011fba Implemented
+011fe6 Description
+011ffe Set Panel Game Aid Countdown Timer Info
+012062 Panel_Get_Display_Mode
+0120d2 mode
+01212e CIMTYPE
+01213e uint32
+012162 __CLASS
+012172 __PARAMETERS
+0121ae WmiMethodId
+0121da Implemented
+012206 Description
+01221e Get Panel Display Mode
+012262 Panel_Set_Display_Mode
+0122d2 mode
+01232e CIMTYPE
+01233e uint32
+012362 __CLASS
+012372 __PARAMETERS
+0123ae WmiMethodId
+0123da Implemented
+012406 Description
+01241e Set Panel Display Mode
+012462 Panel_Get_Gamut_Switch
+0124d2 mode
+01252e CIMTYPE
+01253e uint32
+012562 __CLASS
+012572 __PARAMETERS
+0125ae WmiMethodId
+0125da Implemented
+012606 Description
+01261e Get Panel Gamut Switch
+012662 Panel_Set_Gamut_Switch
+0126d2 mode
+01272e CIMTYPE
+01273e uint32
+012762 __CLASS
+012772 __PARAMETERS
+0127ae WmiMethodId
+0127da Implemented
+012806 Description
+01281e Set Panel Gamut Switch
+012862 Panel_Get_MPRT
+0128c2 PosX
+01291e CIMTYPE
+01292e uint32
+012952 PosY
+0129ae CIMTYPE
+0129be uint32
+0129e2 SizeX
+012a3e CIMTYPE
+012a4e uint32
+012a72 SizeY
+012ace CIMTYPE
+012ade uint32
+012b02 __CLASS
+012b12 __PARAMETERS
+012b4e WmiMethodId
+012b7a Implemented
+012ba6 Description
+012bbe Get Panel MPRT info
+012bfa Panel_Set_MPRT
+012c5a PosX
+012cb6 CIMTYPE
+012cc6 uint32
+012cea PosY
+012d46 CIMTYPE
+012d56 uint32
+012d7a SizeX
+012dd6 CIMTYPE
+012de6 uint32
+012e0a SizeY
+012e66 CIMTYPE
+012e76 uint32
+012e9a __CLASS
+012eaa __PARAMETERS
+012ee6 WmiMethodId
+012f12 Implemented
+012f3e Description
+012f56 Set Panel MPRT info
+012fc6 Dynamic
+012fea Provider
+012ffe WmiProv
+01301e Locale
+01302e MS\0x409
+013052 Description
+01306a Definition of Fan Max Speed list
+0130be guid
+0130ca {c3c7aeb8-4c06-4d40-8f29-212a6ccd74aa}
+013136 InstanceName
+013186 read
+0131a6 CIMTYPE
+0131b6 string
+0131da Active
+013202 read
+013222 CIMTYPE
+013232 boolean
+013256 Fan_Id
+01327e WmiDataId
+0132a6 read
+0132c6 Description
+0132de Fan ID.
+0132fe CIMTYPE
+01330e uint8
+01332e Fan_Flag
+01335a WmiDataId
+013382 read
+0133a2 Description
+0133ba Fan Flag.
+0133de CIMTYPE
+0133ee uint8
+01340e Fan_DefaultMaxSpeed
+01344e WmiDataId
+013476 read
+013496 Description
+0134ae Fan Default Max Speed.
+0134ee CIMTYPE
+0134fe UINT16
+013522 Fan_CurrentMaxSpeed
+013562 WmiDataId
+01358a read
+0135aa Description
+0135c2 Fan Current Max Speed.
+013602 CIMTYPE
+013612 UINT16
+013636 __CLASS
+013646 LENOVO_FAN_MAX_SPEED_DATA
+01368e __NAMESPACE
+0136a6 root\default
+013712 Dynamic
+013736 Provider
+01374a WmiProv
+01376a Locale
+01377a MS\0x409
+01379e Description
+0137b6 LENOVO CAPABILITY DATA 00
+0137fa guid
+013806 {362a3afe-3d96-4665-8530-96dad5bb300e}
+013872 InstanceName
+0138c2 read
+0138e2 CIMTYPE
+0138f2 string
+013916 Active
+01393e read
+01395e CIMTYPE
+01396e boolean
+0139b2 WmiDataId
+0139da read
+0139fa Description
+013a12  IDs.
+013a2e CIMTYPE
+013a3e uint32
+013a62 Capability
+013a92 WmiDataId
+013aba read
+013ada Description
+013af2 Capability.
+013b1a CIMTYPE
+013b2a uint32
+013b4e DefaultValue
+013b82 WmiDataId
+013baa read
+013bca Description
+013be2 Capability Default Value.
+013c26 CIMTYPE
+013c36 uint32
+013c5a __CLASS
+013c6a LENOVO_CAPABILITY_DATA_00
+013cb2 __NAMESPACE
+013cca root\default
+013d36 Dynamic
+013d5a Provider
+013d6e WmiProv
+013d8e Locale
+013d9e MS\0x409
+013dc2 Description
+013dda LENOVO CAPABILITY DATA 01
+013e1e guid
+013e2a {7a8f5407-cb67-4d6e-b547-39b3be018154}
+013e96 InstanceName
+013ee6 read
+013f06 CIMTYPE
+013f16 string
+013f3a Active
+013f62 read
+013f82 CIMTYPE
+013f92 boolean
+013fd6 WmiDataId
+013ffe read
+01401e Description
+014036  IDs.
+014052 CIMTYPE
+014062 uint32
+014086 Capability
+0140b6 WmiDataId
+0140de read
+0140fe Description
+014116 Capability.
+01413e CIMTYPE
+01414e uint32
+014172 DefaultValue
+0141a6 WmiDataId
+0141ce read
+0141ee Description
+014206 Default Value.
+014236 CIMTYPE
+014246 uint32
+01426a Step
+01428e WmiDataId
+0142b6 read
+0142d6 Description
+0142ee Step.
+01430a CIMTYPE
+01431a uint32
+01433e MinValue
+01436a WmiDataId
+014392 read
+0143b2 Description
+0143ca Minimum Value.
+0143fa CIMTYPE
+01440a uint32
+01442e MaxValue
+01445a WmiDataId
+014482 read
+0144a2 Description
+0144ba Maximum Value.
+0144ea CIMTYPE
+0144fa uint32
+01451e __CLASS
+01452e LENOVO_CAPABILITY_DATA_01
+014576 __NAMESPACE
+01458e root\default
+0145fa Dynamic
+01461e Provider
+014632 WmiProv
+014652 Locale
+014662 MS\0x409
+014686 Description
+01469e LENOVO CAPABILITY DATA 02
+0146e2 guid
+0146ee {bbf1f790-6c2f-422b-bc8c-4e7369c7f6ab}
+01475a InstanceName
+0147aa read
+0147ca CIMTYPE
+0147da string
+0147fe Active
+014826 read
+014846 CIMTYPE
+014856 boolean
+01489a WmiDataId
+0148c2 read
+0148e2 Description
+0148fa  IDs.
+014916 CIMTYPE
+014926 uint32
+01494a Capability
+01497a WmiDataId
+0149a2 read
+0149c2 Description
+0149da Capability.
+014a02 CIMTYPE
+014a12 uint32
+014a36 DataSize
+014a62 WmiDataId
+014a8a read
+014aaa Description
+014ac2 Data Size.
+014aea CIMTYPE
+014afa uint32
+014b1e DefaultValue
+014b52 WmiDataId
+014b7a read
+014b9a Description
+014bb2 Default Value
+014bde WmiSizeIs
+014bf2 DataSize
+014c16 CIMTYPE
+014c26 uint8
+014c46 __CLASS
+014c56 LENOVO_CAPABILITY_DATA_02
+014c9e __NAMESPACE
+014cb6 root\default
+014d22 Dynamic
+014d46 Provider
+014d5a WmiProv
+014d7a Locale
+014d8a MS\0x409
+014dae Description
+014dc6 Definition of Fan Table list
+014e12 guid
+014e1e {87fb2a6d-d802-48e7-9208-4576c5f5c8d8}
+014e8a InstanceName
+014eda read
+014efa CIMTYPE
+014f0a string
+014f2e Active
+014f56 read
+014f76 CIMTYPE
+014f86 boolean
+014faa Mode
+014fce WmiDataId
+014ff6 read
+015016 Description
+01502e Mode.
+01504a CIMTYPE
+01505a uint16
+01507e Fan_Id
+0150a6 WmiDataId
+0150ce read
+0150ee Description
+015106 Fan ID.
+015126 CIMTYPE
+015136 uint16
+01515a FanTable_Len
+01518e WmiDataId
+0151b6 read
+0151d6 Description
+0151ee Fan Table Len.
+01521e CIMTYPE
+01522e uint32
+015252 FanTable_Data
+015286 WmiDataId
+0152ae read
+0152ce Description
+0152e6 Fan Table Data.
+015316 WmiSizeIs
+01532a FanTable_Len
+015356 CIMTYPE
+015366 uint16
+01538a Sensor_ID
+0153b6 WmiDataId
+0153de read
+0153fe Description
+015416 Sensor ID.
+01543e CIMTYPE
+01544e uint32
+015472 SensorTable_Len
+0154aa WmiDataId
+0154d2 read
+0154f2 Description
+01550a Sensor Table Len.
+01553e CIMTYPE
+01554e uint32
+015572 SensorTable_Data
+0155ae WmiDataId
+0155d6 read
+0155f6 Description
+01560e Sensor Table Data.
+015646 WmiSizeIs
+01565a SensorTable_Len
+01568a CIMTYPE
+01569a uint16
+0156be StartOnlyUpwardAdjustNumber
+01570e WmiDataId
+015736 read
+015756 Description
+01576e Start Upwards Adjust Number.
+0157ba CIMTYPE
+0157ca uint8
+0157ea EndOnlyUpwardAdjustNumber
+015836 WmiDataId
+01585e read
+01587e Description
+015896 End Upwards Adjust Number.
+0158de CIMTYPE
+0158ee uint8
+01590e CurrentFanMaxSpeed
+01594e WmiDataId
+015976 read
+015996 Description
+0159ae Current Fan Max Speed.
+0159ee CIMTYPE
+0159fe uint16
+015a22 DesignMaxFanSpeedNumber
+015a6a WmiDataId
+015a92 read
+015ab2 Description
+015aca Start Downwards Adjust Number
+015b16 CIMTYPE
+015b26 uint8
+015b46 Reserved
+015b72 WmiDataId
+015b9a read
+015bba Description
+015bd2 End Downwards Adjust Number
+015c1a CIMTYPE
+015c2a uint8
+015c4a CurrentFanMinSpeed
+015c8a WmiDataId
+015cb2 read
+015cd2 Description
+015cea Current Fan Min Speed.
+015d2a CIMTYPE
+015d3a uint16
+015d5e FanSpeedStep
+015d92 WmiDataId
+015dba read
+015dda Description
+015df2 Fan Speed Step.
+015e22 CIMTYPE
+015e32 uint16
+015e56 MaxSensorTemperature
+015e9a WmiDataId
+015ec2 read
+015ee2 Description
+015efa Max Sensor Temperature.
+015f3a CIMTYPE
+015f4a uint16
+015f6e MinSensorTemperature
+015fb2 WmiDataId
+015fda read
+015ffa Description
+016012 Min Sensor Temperature.
+016052 CIMTYPE
+016062 uint16
+016086 SensorTemperatureStep
+0160ca WmiDataId
+0160f2 read
+016112 Description
+01612a Max Sensor Temperature.
+01616a CIMTYPE
+01617a uint16
+01619e __CLASS
+0161ae LENOVO_FAN_TABLE_DATA
+0161ee __NAMESPACE
+016206 root\default
+016272 Dynamic
+016296 Provider
+0162aa WmiProv
+0162ca Locale
+0162da MS\0x409
+0162fe Description
+016316 LENOVO_FAN_METHOD class
+016356 guid
+016362 {92549549-4bde-4f06-ac04-ce8bf898dbaa}
+0163ce InstanceName
+01641e read
+01643e CIMTYPE
+01644e string
+016472 Active
+01649a read
+0164ba CIMTYPE
+0164ca boolean
+0164ee __CLASS
+0164fe LENOVO_FAN_METHOD
+016536 __NAMESPACE
+01654e root\default
+016586 Fan_Get_Table
+0165e2 FanID
+016638 CIMTYPE
+016648 uint8
+016668 SensorID
+0166c4 CIMTYPE
+0166d4 uint8
+0166f4 __CLASS
+016704 __PARAMETERS
+016756 FanTableSize
+0167c2 CIMTYPE
+0167d2 uint32
+0167f6 FanTable
+01683e WmiSizeIs
+016852 FanTableSize
+01689a CIMTYPE
+0168aa uint32
+0168ce SensorTableSize
+01693e CIMTYPE
+01694e uint32
+016972 SensorTable
+0169be WmiSizeIs
+0169d2 SensorTableSize
+016a1e CIMTYPE
+016a2e uint32
+016a52 __CLASS
+016a62 __PARAMETERS
+016a9e WmiMethodId
+016aca Implemented
+016af6 Description
+016b0e Get Fan Table 
+016b42 Fan_Set_Table
+016b9e FanTable
+016c1e CIMTYPE
+016c2e uint8
+016c4e __CLASS
+016c5e __PARAMETERS
+016c9a WmiMethodId
+016cc6 Implemented
+016cf2 Description
+016d0a Set Fan Table 
+016d72 Dynamic
+016d96 Provider
+016daa WmiProv
+016dca Locale
+016dda MS\0x409
+016dfe Description
+016e16 Definition of CPU OC parameter list
+016e6e guid
+016e7a {4C90256D-44EA-D6A8-7650-63DF4FEB2CFF}
+016ee6 InstanceName
+016f36 read
+016f56 CIMTYPE
+016f66 string
+016f8a Active
+016fb2 read
+016fd2 CIMTYPE
+016fe2 boolean
+017006 mode
+01702a WmiDataId
+017052 read
+017072 Description
+01708a OC mode id.
+0170b2 CIMTYPE
+0170c2 uint8
+0170e2 CpuType
+01710a WmiDataId
+017132 read
+017152 Description
+01716a OC Cpu type.
+017196 CIMTYPE
+0171a6 uint8
+0171c6 Reserved
+0171f2 WmiDataId
+01721a read
+01723a Description
+017252 Reserved.
+017276 CIMTYPE
+017286 uint16
+0172aa Tuneid
+0172d2 WmiDataId
+0172fa read
+01731a Description
+017332 OC tune id.
+01735a CIMTYPE
+01736a uint32
+01738e DefaultValue
+0173c2 WmiDataId
+0173ea read
+01740a Description
+017422 Default value.
+017452 CIMTYPE
+017462 uint32
+017486 OCValue
+0174ae WmiDataId
+0174d6 read
+0174f6 Description
+01750e OC Value.
+017532 CIMTYPE
+017542 uint32
+017566 MinValue
+017592 WmiDataId
+0175ba read
+0175da Description
+0175f2 Min Value.
+01761a CIMTYPE
+01762a uint32
+01764e MaxValue
+01767a WmiDataId
+0176a2 read
+0176c2 Description
+0176da Max Value.
+017702 CIMTYPE
+017712 uint32
+017736 ScaleValue
+017766 WmiDataId
+01778e read
+0177ae Description
+0177c6 Scale Value.
+0177f2 CIMTYPE
+017802 uint32
+017826 OCOrderid
+017852 WmiDataId
+01787a read
+01789a Description
+0178b2 OC Order id.
+0178de CIMTYPE
+0178ee uint32
+017912 NOCOrderid
+017942 WmiDataId
+01796a read
+01798a Description
+0179a2 NON-OC Order id.
+0179d6 CIMTYPE
+0179e6 uint32
+017a0a Interval
+017a36 WmiDataId
+017a5e read
+017a7e Description
+017a96 Delay time in ms.
+017aca CIMTYPE
+017ada uint32
+017afe __CLASS
+017b0e LENOVO_CPU_OVERCLOCKING_DATA
+017b5e __NAMESPACE
+017b76 root\default
+017be2 Dynamic
+017c06 Provider
+017c1a WmiProv
+017c3a Locale
+017c4a MS\0x409
+017c6e Description
+017c86 Definition of discrete Data 
+017cd2 guid
+017cde {91433b17-b7b7-4640-bb40-34c67349fbec}
+017d4a InstanceName
+017d9a read
+017dba CIMTYPE
+017dca string
+017dee Active
+017e16 read
+017e36 CIMTYPE
+017e46 boolean
+017e8a WmiDataId
+017eb2 read
+017ed2 Description
+017f02 CIMTYPE
+017f12 uint32
+017f36 Value
+017f5a WmiDataId
+017f82 read
+017fa2 Description
+017fba Discrete Data
+017fe6 CIMTYPE
+017ff6 uint32
+01801a __CLASS
+01802a LENOVO_DISCRETE_DATA
+01806a __NAMESPACE
+018082 root\default
+0180ee Dynamic
+018112 Provider
+018126 WmiProv
+018146 Locale
+018156 MS\0x409
+01817a Description
+018192 LENOVO_CPU_METHOD class
+0181d2 guid
+0181de {14afd777-106f-4c9b-b334-d388dc7809be}
+01824a InstanceName
+01829a read
+0182ba CIMTYPE
+0182ca string
+0182ee Active
+018316 read
+018336 CIMTYPE
+018346 boolean
+01836a __CLASS
+01837a LENOVO_CPU_METHOD
+0183b2 __NAMESPACE
+0183ca root\default
+018402 CPU_Set_OC_Data
+018462 mode
+0184be CIMTYPE
+0184ce uint8
+0184ee TuneID
+01854e CIMTYPE
+01855e uint32
+018582 value
+0185de CIMTYPE
+0185ee uint32
+018612 __CLASS
+018622 __PARAMETERS
+01865e WmiMethodId
+01868a Implemented
+0186b6 Description
+0186ce Set CPU Overclock Data 
+018746 Dynamic
+01876a Provider
+01877e WmiProv
+01879e Locale
+0187ae MS\0x409
+0187d2 Description
+0187ea Definition of GPU OC parameter list
+018842 guid
+01884e {8A8984E2-228F-685F-B496-DDA5F52CBE5B}
+0188ba InstanceName
+01890a read
+01892a CIMTYPE
+01893a string
+01895e Active
+018986 read
+0189a6 CIMTYPE
+0189b6 boolean
+0189da mode
+0189fe WmiDataId
+018a26 read
+018a46 Description
+018a5e OC mode .
+018a82 CIMTYPE
+018a92 uint8
+018ab2 GpuType
+018ada WmiDataId
+018b02 read
+018b22 Description
+018b3a OC Gpu type.
+018b66 CIMTYPE
+018b76 uint8
+018b96 PStateID
+018bc2 WmiDataId
+018bea read
+018c0a Description
+018c22 P-State ID.
+018c4a CIMTYPE
+018c5a uint32
+018c7e ClockID
+018ca6 WmiDataId
+018cce read
+018cee Description
+018d06 CLOCK ID.
+018d2a CIMTYPE
+018d3a uint32
+018d5e defaultvalue
+018d92 WmiDataId
+018dba read
+018dda Description
+018df2 Default value.
+018e22 CIMTYPE
+018e32 uint32
+018e56 OCOffsetFreq
+018e8a WmiDataId
+018eb2 read
+018ed2 Description
+018eea OC Offset freqency.
+018f22 CIMTYPE
+018f32 uint32
+018f56 OCMinOffset
+018f86 WmiDataId
+018fae read
+018fce Description
+018fe6 OC Min offset value.
+019022 CIMTYPE
+019032 uint32
+019056 OCMaxOffset
+019086 WmiDataId
+0190ae read
+0190ce Description
+0190e6 OC Max offset value.
+019122 CIMTYPE
+019132 uint32
+019156 OCOffsetScale
+01918a WmiDataId
+0191b2 read
+0191d2 Description
+0191ea OC Offset Scale.
+01921e CIMTYPE
+01922e uint32
+019252 OCOrderid
+01927e WmiDataId
+0192a6 read
+0192c6 Description
+0192de OC Order id.
+01930a CIMTYPE
+01931a uint32
+01933e NOCOrderid
+01936e WmiDataId
+019396 read
+0193b6 Description
+0193ce NON-OC Order id.
+019402 CIMTYPE
+019412 uint32
+019436 Interval
+019462 WmiDataId
+01948a read
+0194aa Description
+0194c2 Delay time in ms.
+0194f6 CIMTYPE
+019506 uint32
+01952a Capability
+01955a WmiDataId
+019582 read
+0195a2 Description
+0195ba Capability
+0195e2 CIMTYPE
+0195f2 uint32
+019616 __CLASS
+019626 LENOVO_GPU_OVERCLOCKING_DATA
+019676 __NAMESPACE
+01968e root\default
+0196fa Dynamic
+01971e Provider
+019732 WmiProv
+019752 Locale
+019762 MS\0x409
+019786 Description
+01979e LENOVO_GPU_METHOD class
+0197de guid
+0197ea {da7547f1-824d-405f-be79-d9903e29ced7}
+019856 InstanceName
+0198a6 read
+0198c6 CIMTYPE
+0198d6 string
+0198fa Active
+019922 read
+019942 CIMTYPE
+019952 boolean
+019976 __CLASS
+019986 LENOVO_GPU_METHOD
+0199be __NAMESPACE
+0199d6 root\default
+019a42 Dynamic
+019a66 Provider
+019a7a WmiProv
+019a9a Locale
+019aaa MS\0x409
+019ace Description
+019ae6 Definition of Memory OC list
+019b32 guid
+019b3e {37d0014b-370c-47ef-bf03-588e8acb2fcd}
+019baa InstanceName
+019bfa read
+019c1a CIMTYPE
+019c2a string
+019c4e Active
+019c76 read
+019c96 CIMTYPE
+019ca6 boolean
+019cca MEM_OC_Ability
+019d02 WmiDataId
+019d2a read
+019d4a Description
+019d62 Memory OC Ability.
+019d9a CIMTYPE
+019daa uint8
+019dca MEM_OC_Max_Frequency
+019e0e WmiDataId
+019e36 read
+019e56 Description
+019e6e Memory OC Max Frequency.
+019eb2 CIMTYPE
+019ec2 uint16
+019ee6 MEM_OC_Min_Frequency
+019f2a WmiDataId
+019f52 read
+019f72 Description
+019f8a Memory OC Min Frequency.
+019fce CIMTYPE
+019fde uint16
+01a002 MEM_OC_Default_Frequency
+01a04e WmiDataId
+01a076 read
+01a096 Description
+01a0ae Memory OC Default Frequency.
+01a0fa CIMTYPE
+01a10a uint16
+01a12e MEM_OC_Frequency_Scaler
+01a176 WmiDataId
+01a19e read
+01a1be Description
+01a1d6 Memory OC Frequency Scaler.
+01a21e CIMTYPE
+01a22e uint16
+01a252 MEM_OC_XMP_Numbers
+01a292 WmiDataId
+01a2ba read
+01a2da Description
+01a2f2 Memory OC Support XMP Numbers.
+01a342 CIMTYPE
+01a352 uint8
+01a372 MEM_OC_Customize_Frequency
+01a3c2 WmiDataId
+01a3ea read
+01a40a Description
+01a422 Memory OC Customize Data Frequency.
+01a47a CIMTYPE
+01a48a uint16
+01a4ae MEM_OC_Customize_tCLK
+01a4f2 WmiDataId
+01a51a read
+01a53a Description
+01a552 Memory OC Customize Data tCLK.
+01a5a2 CIMTYPE
+01a5b2 uint16
+01a5d6 MEM_OC_Customize_tCL
+01a61a WmiDataId
+01a642 read
+01a662 Description
+01a67a Memory OC Customize Data tCL.
+01a6c6 CIMTYPE
+01a6d6 uint16
+01a6fa MEM_OC_Customize_tRCD_tRP
+01a746 WmiDataId
+01a76e read
+01a78e Description
+01a7a6 Memory OC Customize Data tRCD_tRP.
+01a7fe CIMTYPE
+01a80e uint16
+01a832 MEM_OC_Customize_tRAS
+01a876 WmiDataId
+01a89e read
+01a8be Description
+01a8d6 Memory OC Customize Data tRAS.
+01a926 CIMTYPE
+01a936 uint16
+01a95a MEM_OC_Customize_tCWL
+01a99e WmiDataId
+01a9c6 read
+01a9e6 Description
+01a9fe Memory OC Customize Data tCWL.
+01aa4e CIMTYPE
+01aa5e uint16
+01aa82 MEM_OC_Customize_tFAW
+01aac6 WmiDataId
+01aaee read
+01ab0e Description
+01ab26 Memory OC Customize Data tFAW.
+01ab76 CIMTYPE
+01ab86 uint16
+01abaa MEM_OC_Customize_tREFI
+01abf2 WmiDataId
+01ac1a read
+01ac3a Description
+01ac52 Memory OC Customize Data tREFI.
+01aca2 CIMTYPE
+01acb2 uint16
+01acd6 MEM_OC_Customize_tRFC
+01ad1a WmiDataId
+01ad42 read
+01ad62 Description
+01ad7a Memory OC Customize Data tRFC.
+01adca CIMTYPE
+01adda uint16
+01adfe MEM_OC_Customize_tRRD
+01ae42 WmiDataId
+01ae6a read
+01ae8a Description
+01aea2 Memory OC Customize Data tRRD.
+01aef2 CIMTYPE
+01af02 uint16
+01af26 MEM_OC_Customize_tRTP
+01af6a WmiDataId
+01af92 read
+01afb2 Description
+01afca Memory OC Customize Data tRTP.
+01b01a CIMTYPE
+01b02a uint16
+01b04e MEM_OC_Customize_tWTR
+01b092 WmiDataId
+01b0ba read
+01b0da Description
+01b0f2 Memory OC Customize Data tWTR.
+01b142 CIMTYPE
+01b152 uint16
+01b176 MEM_OC_Customize_NMode
+01b1be WmiDataId
+01b1e6 read
+01b206 Description
+01b21e Memory OC Customize Data NMode.
+01b26e CIMTYPE
+01b27e uint16
+01b2a2 MEM_OC_Customize_VDD
+01b2e6 WmiDataId
+01b30e read
+01b32e Description
+01b346 Memory OC Customize Data VDD.
+01b392 CIMTYPE
+01b3a2 uint16
+01b3c6 __CLASS
+01b3d6 LENOVO_MEMORY_OC_DATA
+01b416 __NAMESPACE
+01b42e root\default
+01b49a Dynamic
+01b4be Provider
+01b4d2 WmiProv
+01b4f2 Locale
+01b502 MS\0x409
+01b526 Description
+01b53e Definition of default value in different mode list
+01b5b6 guid
+01b5c2 {6260ecad-0d7d-4201-a8bd-2552e812501f}
+01b62e InstanceName
+01b67e read
+01b69e CIMTYPE
+01b6ae string
+01b6d2 Active
+01b6fa read
+01b71a CIMTYPE
+01b72a boolean
+01b74e Mode
+01b772 WmiDataId
+01b79a read
+01b7ba Description
+01b7d2 Mode .
+01b7f2 CIMTYPE
+01b802 uint16
+01b826 DefaultRefreshRate
+01b866 WmiDataId
+01b88e read
+01b8ae Description
+01b8c6 Default Refresh Rate .
+01b906 CIMTYPE
+01b916 uint16
+01b93a MinimumRefreshRate
+01b97a WmiDataId
+01b9a2 read
+01b9c2 Description
+01b9da Minimum Refresh Rate .
+01ba1a CIMTYPE
+01ba2a uint16
+01ba4e MaximumRefreshRate
+01ba8e WmiDataId
+01bab6 read
+01bad6 Description
+01baee Maximum Refresh Rate .
+01bb2e CIMTYPE
+01bb3e uint16
+01bb62 InternalPanelHwID
+01bb9e WmiDataId
+01bbc6 read
+01bbe6 Description
+01bbfe Internal Panel HWID .
+01bc3a CIMTYPE
+01bc4a uint32
+01bc6e __CLASS
+01bc7e LENOVO_INTERNAL_PANEL_REFRESH_RATE_DATA
+01bce2 __NAMESPACE
+01bcfa root\default
+01bd66 Dynamic
+01bd8a Provider
+01bd9e WmiProv
+01bdbe Locale
+01bdce MS\0x409
+01bdf2 Description
+01be0a LENOVO_MEMORY_METHOD class
+01be52 guid
+01be5e {03607fce-0d83-4612-8a6e-4a4ef0415ea9}
+01beca InstanceName
+01bf1a read
+01bf3a CIMTYPE
+01bf4a string
+01bf6e Active
+01bf96 read
+01bfb6 CIMTYPE
+01bfc6 boolean
+01bfea __CLASS
+01bffa LENOVO_MEMORY_METHOD
+01c03a __NAMESPACE
+01c052 root\default
+01c08a MEM_Get_OC_Status
+01c0ee mode
+01c142 CIMTYPE
+01c152 uint8
+01c172 __CLASS
+01c182 __PARAMETERS
+01c1d4 Status
+01c234 CIMTYPE
+01c244 uint8
+01c264 __CLASS
+01c274 __PARAMETERS
+01c2b0 WmiMethodId
+01c2dc Implemented
+01c308 Description
+01c320 Get Memory OC Status 
+01c360 MEM_Set_OC_Status
+01c3c4 mode
+01c420 CIMTYPE
+01c430 uint8
+01c450 Status
+01c4b0 CIMTYPE
+01c4c0 uint8
+01c4e0 __CLASS
+01c4f0 __PARAMETERS
+01c52c WmiMethodId
+01c558 Implemented
+01c584 Description
+01c59c Set Memory OC Status 
+01c5dc MEM_Set_OC_Data
+01c63c MEM_OCData
+01c6c0 CIMTYPE
+01c6d0 UINT8
+01c6f0 __CLASS
+01c700 __PARAMETERS
+01c73c WmiMethodId
+01c768 Implemented
+01c794 Description
+01c7ac Set Memory OC Data 
+01c81c Dynamic
+01c840 Provider
+01c854 WmiProv
+01c874 Locale
+01c884 MS\0x409
+01c8a8 Description
+01c8c0 LENOVO_OTHER_METHOD class
+01c904 guid
+01c910 {dc2a8805-3a8c-41ba-a6f7-092e0089cd3b}
+01c97c InstanceName
+01c9cc read
+01c9ec CIMTYPE
+01c9fc string
+01ca20 Active
+01ca48 read
+01ca68 CIMTYPE
+01ca78 boolean
+01ca9c __CLASS
+01caac LENOVO_OTHER_METHOD
+01cae8 __NAMESPACE
+01cb00 root\default
+01cb38 GetFeatureValue
+01cbea CIMTYPE
+01cbfa uint32
+01cc1c __CLASS
+01cc2c __PARAMETERS
+01cc7e value
+01ccda CIMTYPE
+01ccea uint32
+01cd0e __CLASS
+01cd1e __PARAMETERS
+01cd5a WmiMethodId
+01cd86 Implemented
+01cdb2 Description
+01cdca Get Feature Value 
+01ce06 SetFeatureValue
+01cebe CIMTYPE
+01cece uint32
+01cef2 value
+01cf4e CIMTYPE
+01cf5e uint32
+01cf82 __CLASS
+01cf92 __PARAMETERS
+01cfce WmiMethodId
+01cffa Implemented
+01d026 Description
+01d03e Set Feature Value 
+01d07a GetDataByCommand
+01d130 CIMTYPE
+01d140 uint32
+01d162 Command
+01d1bc CIMTYPE
+01d1cc uint32
+01d1ee __CLASS
+01d1fe __PARAMETERS
+01d250 DataSize
+01d2b4 CIMTYPE
+01d2c4 uint32
+01d2e8 Data
+01d328 WmiSizeIs
+01d33c DataSize
+01d37c CIMTYPE
+01d38c uint32
+01d3b0 __CLASS
+01d3c0 __PARAMETERS
+01d3fc WmiMethodId
+01d428 Implemented
+01d454 Description
+01d46c Get Data By Command 
+01d4ac GetDataByPackage
+01d510 input
+01d582 CIMTYPE
+01d592 uint8
+01d5b2 __CLASS
+01d5c2 __PARAMETERS
+01d614 DataSize
+01d678 CIMTYPE
+01d688 uint32
+01d6ac Data
+01d6ec WmiSizeIs
+01d700 DataSize
+01d740 CIMTYPE
+01d750 uint8
+01d770 __CLASS
+01d780 __PARAMETERS
+01d7bc WmiMethodId
+01d7e8 Implemented
+01d814 Description
+01d82c Get Data By Package 
+01d8a0 Dynamic
+01d8c4 Provider
+01d8d8 WmiProv
+01d8f8 Locale
+01d908 MS\0x409
+01d92c Description
+01d944 AC_PD Status Change Event 
+01d98c guid
+01d998 {be1346e5-3a32-4a31-b8b0-2cd195e1f572}
+01da04 InstanceName
+01da54 read
+01da74 CIMTYPE
+01da84 string
+01daa8 Active
+01dad0 read
+01daf0 CIMTYPE
+01db00 boolean
+01db24 AC_PD_Status
+01db58 WmiDataId
+01db80 read
+01dba0 Description
+01dbb8 AC_PD Status
+01dbe4 CIMTYPE
+01dbf4 uint16
+01dc18 __CLASS
+01dc28 LENOVO_AC_PD_EVENT
+01dc64 __NAMESPACE
+01dc7c root\default
+01dcac __SUPERCLASS
+01dcc8 WMIEvent
+01dd2c Dynamic
+01dd50 Provider
+01dd64 WmiProv
+01dd84 Locale
+01dd94 MS\0x409
+01ddb8 Description
+01ddd0 Bluetooth Keyboard Status Change Event 
+01de30 guid
+01de3c {806bd2a2-177b-481d-bfb5-3ba0bb4a2285}
+01dea8 InstanceName
+01def8 read
+01df18 CIMTYPE
+01df28 string
+01df4c Active
+01df74 read
+01df94 CIMTYPE
+01dfa4 boolean
+01dfc8 Status
+01dff0 WmiDataId
+01e018 read
+01e038 Description
+01e050 AC_PD Status
+01e07c CIMTYPE
+01e08c uint32
+01e0b0 __CLASS
+01e0c0 LENOVO_BTKBD_EVENT
+01e0fc __NAMESPACE
+01e114 root\default
+01e144 __SUPERCLASS
+01e160 WMIEvent
+01e1c4 Dynamic
+01e1e8 Provider
+01e1fc WmiProv
+01e21c Locale
+01e22c MS\0x409
+01e250 Description
+01e268 Definition of Status according to IDs
+01e2c4 guid
+01e2d0 {e7f300fa-21cd-4003-adac-2696135982e6}
+01e33c InstanceName
+01e38c read
+01e3ac CIMTYPE
+01e3bc string
+01e3e0 Active
+01e408 read
+01e428 CIMTYPE
+01e438 boolean
+01e47c WmiDataId
+01e4a4 read
+01e4c4 Description
+01e4dc IDs.
+01e4f8 CIMTYPE
+01e508 uint32
+01e52c Status
+01e554 WmiDataId
+01e57c read
+01e59c Description
+01e5b4 Status.
+01e5d4 CIMTYPE
+01e5e4 uint32
+01e608 __CLASS
+01e618 LENOVO_FEATURE_STATUS_DATA
+01e664 __NAMESPACE
+01e67c root\default
+01e6e8 Dynamic
+01e70c Provider
+01e720 WmiProv
+01e740 Locale
+01e750 MS\0x409
+01e774 Description
+01e78c Definition of Lighting List
+01e7d4 guid
+01e7e0 {4dd5bd84-15a9-47e2-ad65-cc61a5c62fd0}
+01e84c InstanceName
+01e89c read
+01e8bc CIMTYPE
+01e8cc string
+01e8f0 Active
+01e918 read
+01e938 CIMTYPE
+01e948 boolean
+01e96c Lighting_Id
+01e99c WmiDataId
+01e9c4 read
+01e9e4 Description
+01e9fc Lighting ID.
+01ea28 CIMTYPE
+01ea38 uint8
+01ea58 Control_Interface
+01ea94 WmiDataId
+01eabc read
+01eadc Description
+01eaf4 Control interface .
+01eb2c CIMTYPE
+01eb3c uint8
+01eb5c Lighting_Type
+01eb90 WmiDataId
+01ebb8 read
+01ebd8 Description
+01ebf0 Lighting Type.
+01ec20 CIMTYPE
+01ec30 UINT8
+01ec50 State_Type_Num
+01ec88 WmiDataId
+01ecb0 read
+01ecd0 Description
+01ece8 State Type Number.
+01ed20 CIMTYPE
+01ed30 UINT8
+01ed50 Default_State
+01ed84 WmiDataId
+01edac read
+01edcc Description
+01ede4 Default State.
+01ee14 CIMTYPE
+01ee24 UINT8
+01ee44 Brightness_Level
+01ee80 WmiDataId
+01eea8 read
+01eec8 Description
+01eee0 Brightness Level.
+01ef14 CIMTYPE
+01ef24 UINT8
+01ef44 Default_Brightness_Level
+01ef90 WmiDataId
+01efb8 read
+01efd8 Description
+01eff0 Default Brightness Level.
+01f034 CIMTYPE
+01f044 UINT8
+01f064 __CLASS
+01f074 LENOVO_LIGHTING_DATA
+01f0b4 __NAMESPACE
+01f0cc root\default
+01f138 Dynamic
+01f15c Provider
+01f170 WmiProv
+01f190 Locale
+01f1a0 MS\0x409
+01f1c4 Description
+01f1dc LENOVO_LIGHTING_METHOD class
+01f228 guid
+01f234 {8c5b9127-ecd4-4657-980f-851019f99ca5}
+01f2a0 InstanceName
+01f2f0 read
+01f310 CIMTYPE
+01f320 string
+01f344 Active
+01f36c read
+01f38c CIMTYPE
+01f39c boolean
+01f3c0 __CLASS
+01f3d0 LENOVO_LIGHTING_METHOD
+01f414 __NAMESPACE
+01f42c root\default
+01f464 Get_Lighting_Current_Status
+01f4dc Lighting_ID
+01f53e CIMTYPE
+01f54e uint8
+01f56e __CLASS
+01f57e __PARAMETERS
+01f5d0 Current_State_Type
+01f648 CIMTYPE
+01f658 uint8
+01f678 Current_Brightness_Level
+01f6fc CIMTYPE
+01f70c uint8
+01f72c __CLASS
+01f73c __PARAMETERS
+01f778 WmiMethodId
+01f7a4 Implemented
+01f7d0 Description
+01f7e8 Get Current Lighting Status 
+01f838 Set_Lighting_Current_Status
+01f8b0 Lighting_ID
+01f918 CIMTYPE
+01f928 uint8
+01f948 Current_State_Type
+01f9c0 CIMTYPE
+01f9d0 uint8
+01f9f0 Current_Brightness_Level
+01fa74 CIMTYPE
+01fa84 uint8
+01faa4 __CLASS
+01fab4 __PARAMETERS
+01faf0 WmiMethodId
+01fb1c Implemented
+01fb48 Description
+01fb60 Set Current Lighting Status 
+01fbe4 Dynamic
+01fc08 Provider
+01fc1c WmiProv
+01fc3c Locale
+01fc4c MS\0x409
+01fc70 Description
+01fc88 Lighting event 
+01fcb8 guid
+01fcc4 {1e3391a1-2c89-464d-95d9-3028b72e7a33}
+01fd30 InstanceName
+01fd80 read
+01fda0 CIMTYPE
+01fdb0 string
+01fdd4 Active
+01fdfc read
+01fe1c CIMTYPE
+01fe2c boolean
+01fe50 Key_ID
+01fe78 WmiDataId
+01fea0 read
+01fec0 Description
+01fed8 Key eventid
+01ff00 CIMTYPE
+01ff10 uint8
+01ff30 __CLASS
+01ff40 LENOVO_LIGHTING_EVENT
+01ff80 __NAMESPACE
+01ff98 root\default
+01ffc8 __SUPERCLASS
+01ffe4 WMIEvent
+020048 Dynamic
+02006c Provider
+020080 WmiProv
+0200a0 Locale
+0200b0 MS\0x409
+0200d4 Description
+0200ec Lenovo DISPATCHER AI Mode Event
+02013c guid
+020148 {0F7B30EC-AC90-4B34-B62F-87F85115505D}
+0201b4 InstanceName
+020204 read
+020224 CIMTYPE
+020234 string
+020258 Active
+020280 read
+0202a0 CIMTYPE
+0202b0 boolean
+0202d4 PowerLevel
+020304 WmiDataId
+02032c read
+02034c Description
+020364 Lenovo AI Mode Event
+0203a0 CIMTYPE
+0203b0 uint32
+0203d4 __CLASS
+0203e4 LENOVO_DISPATCHER_EVENT
+020428 __NAMESPACE
+020440 root\default
+020470 __SUPERCLASS
+02048c WMIEvent
+0204f0 Dynamic
+020514 Provider
+020528 WmiProv
+020548 Locale
+020558 MS\0x409
+02057c Description
+020594 Lenovo AI Chip Enable Event
+0205dc guid
+0205e8 {67a6c6cc-380a-4d25-aa35-a1397d1fbdfb}
+020654 InstanceName
+0206a4 read
+0206c4 CIMTYPE
+0206d4 string
+0206f8 Active
+020720 read
+020740 CIMTYPE
+020750 boolean
+020774 Status
+02079c WmiDataId
+0207c4 read
+0207e4 Description
+0207fc Lenovo AI Mode Event
+020838 CIMTYPE
+020848 uint32
+02086c __CLASS
+02087c LENOVO_AI_CHIP_EVENT
+0208bc __NAMESPACE
+0208d4 root\default
+020904 __SUPERCLASS
+020920 WMIEvent
+020984 Dynamic
+0209a8 Provider
+0209bc WmiProv
+0209dc Locale
+0209ec MS\0x409
+020a10 Description
+020a28 Lenovo Scenario Type Event
+020a70 guid
+020a7c {1cc13f2c-ea2c-4197-95a3-060e2285a645}
+020ae8 InstanceName
+020b38 read
+020b58 CIMTYPE
+020b68 string
+020b8c Active
+020bb4 read
+020bd4 CIMTYPE
+020be4 boolean
+020c08 Type
+020c2c WmiDataId
+020c54 read
+020c74 Description
+020c8c Lenovo Scenario Type
+020cc8 CIMTYPE
+020cd8 uint32
+020cfc __CLASS
+020d0c LENOVO_AI_SCENARIO_TYPE_EVENT
+020d5c __NAMESPACE
+020d74 root\default
+020da4 __SUPERCLASS
+020dc0 WMIEvent
+020e24 Dynamic
+020e48 Provider
+020e5c WmiProv
+020e7c Locale
+020e8c MS\0x409
+020eb0 Description
+020ec8 Lenovo Report Status To Dispatcher Event
+020f2c guid
+020f38 {058F5349-9FE1-4221-B1B3-984BACCE6DC0}
+020fa4 InstanceName
+020ff4 read
+021014 CIMTYPE
+021024 string
+021048 Active
+021070 read
+021090 CIMTYPE
+0210a0 boolean
+0210c4 Type
+0210e8 WmiDataId
+021110 read
+021130 Description
+021148 Lenovo Report Type
+021180 CIMTYPE
+021190 uint32
+0211b4 Value
+0211d8 WmiDataId
+021200 read
+021220 Description
+021238 Lenovo Report Value
+021270 CIMTYPE
+021280 uint32
+0212a4 __CLASS
+0212b4 LENOVO_REPORT_STATUS_TO_DISPATCHER_EVENT
+02131c __NAMESPACE
+021334 root\default
+021364 __SUPERCLASS
+021380 WMIEvent

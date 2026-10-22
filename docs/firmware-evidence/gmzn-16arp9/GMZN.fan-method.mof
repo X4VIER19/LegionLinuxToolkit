@@ -1,0 +1,28 @@
+// Reconstructed directly from the decompressed BMF records for the target class.
+// This is a focused, readable MOF representation; it does not invoke the method.
+#pragma namespace("root\\default")
+
+[Dynamic,
+ Provider("WmiProv"),
+ Locale("MS\\0x409"),
+ Description("LENOVO_FAN_METHOD class"),
+ guid("{92549549-4bde-4f06-ac04-ce8bf898dbaa}")]
+class LENOVO_FAN_METHOD {
+  [key, read] string InstanceName;
+  [read] boolean Active;
+
+  [WmiMethodId(5), Implemented, Description("Get Fan Table ")]
+  void Fan_Get_Table(
+    [in, ID(0)] uint8 FanID,
+    [in, ID(1)] uint8 SensorID,
+    [out, ID(2)] uint32 FanTableSize,
+    [out, WmiSizeIs("FanTableSize"), ID(3)] uint32 FanTable[],
+    [out, ID(4)] uint32 SensorTableSize,
+    [out, WmiSizeIs("SensorTableSize"), ID(5)] uint32 SensorTable[]
+  );
+
+  [WmiMethodId(6), Implemented, Description("Set Fan Table ")]
+  void Fan_Set_Table(
+    [in, Max(0), ID(0)] uint8 FanTable[]
+  );
+};

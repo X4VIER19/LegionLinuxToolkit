@@ -1,0 +1,4 @@
+# Preserve captured firmware evidence byte-for-byte across checkouts.
+docs/firmware-evidence/gmzn-16arp9/GMZN_BMOF.bin binary
+docs/firmware-evidence/gmzn-16arp9/GMZN.decompressed.bmf binary
+docs/firmware-evidence/gmzn-16arp9/GMZN.utf16-strings.txt binary

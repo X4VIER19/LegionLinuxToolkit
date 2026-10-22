@@ -30,6 +30,9 @@ pub enum WmiSchemaValueType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct WmiSchemaParameter {
+    /// Logical parameter identifier from the target's MOF metadata. It does
+    /// not specify a byte offset in an ACPI buffer.
+    pub id: u8,
     pub name: &'static str,
     pub direction: WmiSchemaParameterDirection,
     pub value_type: WmiSchemaValueType,
@@ -65,11 +68,13 @@ pub const fn confirmed_83ex_fan_get_table_schema() -> ConfirmedFanGetTableSchema
         wmi_method_id: FAN_GET_TABLE_METHOD_ID,
         inputs: [
             WmiSchemaParameter {
+                id: 0,
                 name: "FanID",
                 direction: WmiSchemaParameterDirection::Input,
                 value_type: WmiSchemaValueType::UInt8,
             },
             WmiSchemaParameter {
+                id: 1,
                 name: "SensorID",
                 direction: WmiSchemaParameterDirection::Input,
                 value_type: WmiSchemaValueType::UInt8,
@@ -77,24 +82,28 @@ pub const fn confirmed_83ex_fan_get_table_schema() -> ConfirmedFanGetTableSchema
         ],
         outputs: [
             WmiSchemaParameter {
-                name: "FanTable",
-                direction: WmiSchemaParameterDirection::Output,
-                value_type: WmiSchemaValueType::UInt32Array,
-            },
-            WmiSchemaParameter {
+                id: 2,
                 name: "FanTableSize",
                 direction: WmiSchemaParameterDirection::Output,
                 value_type: WmiSchemaValueType::UInt32,
             },
             WmiSchemaParameter {
-                name: "SensorTable",
+                id: 3,
+                name: "FanTable",
                 direction: WmiSchemaParameterDirection::Output,
                 value_type: WmiSchemaValueType::UInt32Array,
             },
             WmiSchemaParameter {
+                id: 4,
                 name: "SensorTableSize",
                 direction: WmiSchemaParameterDirection::Output,
                 value_type: WmiSchemaValueType::UInt32,
+            },
+            WmiSchemaParameter {
+                id: 5,
+                name: "SensorTable",
+                direction: WmiSchemaParameterDirection::Output,
+                value_type: WmiSchemaValueType::UInt32Array,
             },
         ],
         linux_acpi_abi: LinuxAcpiAbiBoundary {
@@ -130,6 +139,7 @@ pub const fn known_83ex_fan_set_table_metadata() -> KnownFanSetTableMetadata {
         method_name: "Fan_Set_Table",
         wmi_method_id: FAN_SET_TABLE_METHOD_ID,
         input: WmiSchemaParameter {
+            id: 0,
             name: "FanTable",
             direction: WmiSchemaParameterDirection::Input,
             value_type: WmiSchemaValueType::UInt8Array,
@@ -147,12 +157,19 @@ mod tests {
         let schema = confirmed_83ex_fan_get_table_schema();
         assert_eq!(schema.guid, LENOVO_FAN_METHOD_GUID);
         assert_eq!(schema.wmi_method_id, 5);
+        assert_eq!(schema.inputs[0].id, 0);
+        assert_eq!(schema.inputs[1].id, 1);
         assert_eq!(schema.inputs[0].value_type, WmiSchemaValueType::UInt8);
         assert_eq!(schema.inputs[1].value_type, WmiSchemaValueType::UInt8);
+        assert_eq!(schema.outputs[0].id, 2);
+        assert_eq!(schema.outputs[0].name, "FanTableSize");
         assert_eq!(
-            schema.outputs[0].value_type,
+            schema.outputs[1].value_type,
             WmiSchemaValueType::UInt32Array
         );
+        assert_eq!(schema.outputs[1].id, 3);
+        assert_eq!(schema.outputs[2].id, 4);
+        assert_eq!(schema.outputs[3].id, 5);
         assert_eq!(
             schema.linux_acpi_abi.request_encoding,
             WmiKnowledge::Unknown
@@ -164,6 +181,7 @@ mod tests {
     fn fan_set_table_is_metadata_only_and_prohibited() {
         let metadata = known_83ex_fan_set_table_metadata();
         assert_eq!(metadata.wmi_method_id, 6);
+        assert_eq!(metadata.input.id, 0);
         assert_eq!(metadata.input.value_type, WmiSchemaValueType::UInt8Array);
         assert_eq!(metadata.invocation, FanSetTableInvocation::Prohibited);
     }
