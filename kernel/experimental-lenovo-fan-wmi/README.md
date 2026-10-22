@@ -2,8 +2,10 @@
 
 Este directorio contiene código de preparación aislado para una futura lectura
 de `Fan_Get_Table` en la Lenovo Legion Slim 5 16ARP9 (83EX), BIOS `NUCN15WW`.
-No forma parte del espacio de trabajo Rust, no se incluye desde ningún árbol de
-compilación del kernel y no debe compilarse ni cargarse en esta fase.
+No forma parte del espacio de trabajo Rust ni se incluye desde ningún árbol de
+compilación del kernel. La Fase 6O validó que puede compilarse de forma aislada
+contra las cabeceras de Nobara, pero no debe cargarse ni registrarse en esta
+fase.
 
 ## Estado de seguridad
 
@@ -15,6 +17,18 @@ por ningún otro camino ejecutable.
 
 No existe API de usuario, atributo sysfs, interfaz de escritura, control de RPM
 ni soporte para `Fan_Set_Table`.
+
+## Compilación aislada validada
+
+La compilación se validó una vez, en una copia temporal del directorio, contra
+las cabeceras de Nobara `7.2.11-200.nobara.fc44.x86_64`. Kbuild generó el
+módulo sin errores de compilación. El árbol del repositorio no recibió binarios
+ni artefactos de Kbuild, y el módulo no se cargó, registró ni ejecutó.
+
+Los avisos de BTF derivados de que el entorno de compilación no dispone de un
+`vmlinux` compatible o de la misma versión de `pahole` no modifican el código
+ni habilitan el módulo. Una futura compilación debe continuar siendo aislada y
+no autoriza carga ni prueba contra el firmware.
 
 ## Contrato confirmado que se conserva
 
