@@ -60,7 +60,7 @@ static const struct wmi_device_id legion_fan_wmi_id_table[] = {
 	{}
 };
 
-/* A registered driver would still fail closed until a later approved phase. */
+/* A registered driver still fails closed without firmware access. */
 static int legion_fan_wmi_probe_disabled(struct wmi_device *wdev,
 					 const void *context)
 {
@@ -75,11 +75,7 @@ static void legion_fan_wmi_remove_disabled(struct wmi_device *wdev)
 	(void)wdev;
 }
 
-/*
- * The definition is intentionally unused. There is no wmi_driver_register()
- * or module_wmi_driver() call in this phase, so no binding can occur.
- */
-static struct wmi_driver legion_fan_wmi_driver __maybe_unused = {
+static struct wmi_driver legion_fan_wmi_driver = {
 	.driver = {
 		.name = "legion-fan-wmi-experimental",
 	},
@@ -129,14 +125,25 @@ static struct miscdevice legion_fan_endpoint = {
 	.fops = &legion_fan_endpoint_fops,
 };
 
-/* No WMI driver is registered and no WMI method is evaluated here. */
+/* Registers the endpoint first and rolls it back if WMI registration fails. */
 static int __init legion_fan_endpoint_init(void)
 {
-	return misc_register(&legion_fan_endpoint);
+	int error;
+
+	error = misc_register(&legion_fan_endpoint);
+	if (error)
+		return error;
+
+	error = wmi_driver_register(&legion_fan_wmi_driver);
+	if (error)
+		misc_deregister(&legion_fan_endpoint);
+
+	return error;
 }
 
 static void __exit legion_fan_endpoint_exit(void)
 {
+	wmi_driver_unregister(&legion_fan_wmi_driver);
 	misc_deregister(&legion_fan_endpoint);
 }
 

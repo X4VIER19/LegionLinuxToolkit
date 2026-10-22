@@ -9,11 +9,12 @@ fase.
 
 ## Estado de seguridad
 
-El archivo C define, pero **no registra**, un `wmi_driver` para el GUID Lenovo.
-No emite un alias WMI para carga automática. Los callbacks `probe` y `remove`
-son inertes: el primero devuelve `-EOPNOTSUPP` y ninguno evalúa firmware. Sus
-funciones de inicialización y salida gestionan exclusivamente el ciclo de vida
-del `miscdevice` experimental. La única función de lectura devuelve
+El archivo C registra un `wmi_driver` para el GUID Lenovo únicamente durante
+la inicialización explícita del módulo. No emite un alias WMI para carga
+automática. Los callbacks `probe` y `remove` son inertes: el primero devuelve
+`-EOPNOTSUPP` y ninguno evalúa firmware. Si el registro WMI falla, se revierte
+el registro previo del `miscdevice`; en salida se retira primero el driver WMI
+y después el dispositivo. La única función de lectura devuelve
 `-EOPNOTSUPP` antes de poder invocar una API WMI. Por tanto, este módulo no
 evalúa métodos ACPI/WMI, ni al cargarse ni por ningún otro camino ejecutable.
 
@@ -42,15 +43,15 @@ No entrega datos FAT2, no controla ventiladores y no accede a WMI. Las
 respuestas sintéticas solo existen en fixtures Rust y se etiquetan como
 simulación. Este repositorio no instala el módulo ni habilita carga automática.
 
-## Vinculación WMI preparada y desactivada
+## Vinculación WMI experimental
 
 La estructura privada `wmi_driver` identifica el GUID
-`92549549-4BDE-4F06-AC04-CE8BF898DBAA`, pero no existe una llamada a
-`wmi_driver_register()` ni se emplea `module_wmi_driver()`. Por ello, no puede
-vincularse a un dispositivo WMI durante esta fase. Una activación posterior
-requerirá una modificación explícita y auditable del ciclo de vida, revisión
-del orden de registro y limpieza, pruebas aisladas y una autorización
-independiente. Esa activación no autorizaría por sí sola `Fan_Get_Table`.
+`92549549-4BDE-4F06-AC04-CE8BF898DBAA` y se registra mediante el ciclo de vida
+del módulo. No se emplea `module_wmi_driver()` ni se publica un alias WMI; el
+módulo solo puede llegar a ello mediante una carga manual autorizada. Si el GUID
+ya está gestionado por otro controlador, este módulo no desplaza ni desvincula
+al existente. Incluso si se produjera una vinculación, `probe` falla cerrado y
+no autoriza `Fan_Get_Table`.
 
 ## Compilación aislada validada
 
