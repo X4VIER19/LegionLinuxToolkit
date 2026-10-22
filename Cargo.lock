@@ -54,6 +54,8 @@ version = "0.1.0"
 dependencies = [
  "legion-core",
  "rustix",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

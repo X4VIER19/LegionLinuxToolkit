@@ -16,7 +16,13 @@ use rustix::{
     fs::{CWD, FileType, Mode, OFlags, ResolveFlags, fstat, openat2},
     io::{Errno, read},
 };
-use std::{collections::BTreeMap, fmt, fs::File};
+use serde::Serialize;
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, VecDeque},
+    fmt,
+    fs::File,
+};
 
 #[cfg(test)]
 use std::{
@@ -48,7 +54,7 @@ impl PlatformProfileEntry {
 /// constructed only by the private, capability-gated provider after a complete
 /// successful read; public fixtures can only produce `StaticSimulation`.
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum LinuxPlatformProfileOrigin {
     StaticSimulation { root_label: String },
     LinuxReadOnly { interface: &'static str },
@@ -56,7 +62,7 @@ pub enum LinuxPlatformProfileOrigin {
 
 /// Parsed data plus its acquisition class. The embedded core provenance is
 /// checked against this origin before the result is published.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct LinuxPlatformProfileReading {
     pub profile: PlatformProfileReading,
     pub origin: LinuxPlatformProfileOrigin,
@@ -400,6 +406,154 @@ impl PlatformProfileByteSource for SimulatedPlatformProfileTree {
 
 impl private::Sealed for SimulatedPlatformProfileTree {}
 
+/// Closed, in-memory scenarios for the isolated experimental binary. They do
+/// not carry a path, descriptor, origin, or activation capability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IsolatedPlatformProfileScenario {
+    Valid,
+    MissingActive,
+    Symlink,
+    InvalidUtf8,
+    TooLarge,
+    Partial,
+    PermissionDenied,
+    ConcurrentChange,
+}
+
+impl IsolatedPlatformProfileScenario {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Valid => "valid",
+            Self::MissingActive => "missing-active",
+            Self::Symlink => "symlink",
+            Self::InvalidUtf8 => "invalid-utf8",
+            Self::TooLarge => "too-large",
+            Self::Partial => "partial",
+            Self::PermissionDenied => "permission-denied",
+            Self::ConcurrentChange => "concurrent-change",
+        }
+    }
+}
+
+/// Resolves only a closed scenario name. Host paths, flags, and environment
+/// values have no representation in this API.
+pub fn isolated_platform_profile_scenario(name: &str) -> Option<IsolatedPlatformProfileScenario> {
+    match name {
+        "valid" => Some(IsolatedPlatformProfileScenario::Valid),
+        "missing-active" => Some(IsolatedPlatformProfileScenario::MissingActive),
+        "symlink" => Some(IsolatedPlatformProfileScenario::Symlink),
+        "invalid-utf8" => Some(IsolatedPlatformProfileScenario::InvalidUtf8),
+        "too-large" => Some(IsolatedPlatformProfileScenario::TooLarge),
+        "partial" => Some(IsolatedPlatformProfileScenario::Partial),
+        "permission-denied" => Some(IsolatedPlatformProfileScenario::PermissionDenied),
+        "concurrent-change" => Some(IsolatedPlatformProfileScenario::ConcurrentChange),
+        _ => None,
+    }
+}
+
+/// Executes one closed scenario entirely in memory. Every successful result
+/// uses `StaticSimulation`; this function cannot construct or invoke the
+/// private sysfs provider.
+pub fn run_isolated_platform_profile_experiment(
+    scenario: IsolatedPlatformProfileScenario,
+) -> Result<LinuxPlatformProfileReading, LinuxPlatformProfileError> {
+    match scenario {
+        IsolatedPlatformProfileScenario::ConcurrentChange => {
+            let source = SequencedStaticSimulationSource::new(vec![
+                (
+                    PlatformProfileEntry::Choices,
+                    PlatformProfileSourceRead::Complete(b"balanced performance\n".to_vec()),
+                ),
+                (
+                    PlatformProfileEntry::Active,
+                    PlatformProfileSourceRead::Complete(b"performance\n".to_vec()),
+                ),
+                (
+                    PlatformProfileEntry::Choices,
+                    PlatformProfileSourceRead::Complete(b"balanced\n".to_vec()),
+                ),
+            ]);
+            LinuxPlatformProfileReader::new(source, MAXIMUM_PLATFORM_PROFILE_BYTES)
+                .read_consistent()
+        }
+        scenario => {
+            let choices = SimulatedEntry::Regular(b"balanced performance\n".to_vec());
+            let active = match scenario {
+                IsolatedPlatformProfileScenario::Valid => {
+                    SimulatedEntry::Regular(b"performance\n".to_vec())
+                }
+                IsolatedPlatformProfileScenario::MissingActive => SimulatedEntry::Missing,
+                IsolatedPlatformProfileScenario::Symlink => SimulatedEntry::Symlink {
+                    target: "simulated-link-target".to_owned(),
+                },
+                IsolatedPlatformProfileScenario::InvalidUtf8 => SimulatedEntry::Regular(vec![0xff]),
+                IsolatedPlatformProfileScenario::TooLarge => {
+                    SimulatedEntry::Regular(vec![b'p'; MAXIMUM_PLATFORM_PROFILE_BYTES + 1])
+                }
+                IsolatedPlatformProfileScenario::Partial => {
+                    SimulatedEntry::Partial { bytes_read: 3 }
+                }
+                IsolatedPlatformProfileScenario::PermissionDenied => {
+                    SimulatedEntry::PermissionDenied
+                }
+                IsolatedPlatformProfileScenario::ConcurrentChange => unreachable!(),
+            };
+            LinuxPlatformProfileReader::new(
+                SimulatedPlatformProfileTree::new("isolated-experiment")
+                    .with_entry(PlatformProfileEntry::Active, active)
+                    .with_entry(PlatformProfileEntry::Choices, choices),
+                MAXIMUM_PLATFORM_PROFILE_BYTES,
+            )
+            .read()
+        }
+    }
+}
+
+/// Internal in-memory sequence for checking the three-read consistency rule.
+/// It has no path or descriptor and always reports static simulation.
+struct SequencedStaticSimulationSource {
+    responses: RefCell<VecDeque<(PlatformProfileEntry, PlatformProfileSourceRead)>>,
+}
+
+impl SequencedStaticSimulationSource {
+    fn new(responses: Vec<(PlatformProfileEntry, PlatformProfileSourceRead)>) -> Self {
+        Self {
+            responses: RefCell::new(responses.into()),
+        }
+    }
+}
+
+impl private::Sealed for SequencedStaticSimulationSource {}
+
+impl PlatformProfileByteSource for SequencedStaticSimulationSource {
+    fn read(
+        &self,
+        entry: PlatformProfileEntry,
+        _maximum_size: usize,
+    ) -> Result<PlatformProfileSourceRead, PlatformProfileSourceError> {
+        let (expected_entry, response) =
+            self.responses.borrow_mut().pop_front().ok_or_else(|| {
+                PlatformProfileSourceError::ReadFailed {
+                    entry,
+                    reason: "isolated scenario exhausted its fixed response sequence".to_owned(),
+                }
+            })?;
+        if entry != expected_entry {
+            return Err(PlatformProfileSourceError::ReadFailed {
+                entry,
+                reason: "isolated scenario requested an unexpected entry".to_owned(),
+            });
+        }
+        Ok(response)
+    }
+
+    fn origin(&self) -> LinuxPlatformProfileOrigin {
+        LinuxPlatformProfileOrigin::StaticSimulation {
+            root_label: "isolated-experiment".to_owned(),
+        }
+    }
+}
+
 const MAXIMUM_PLATFORM_PROFILE_BYTES: usize = 4096;
 const MAX_INTERRUPTED_READS: usize = 2;
 
@@ -676,7 +830,6 @@ fn ensure_directory(file: &File, component: &'static str) -> Result<(), SysfsPro
 mod tests {
     use super::*;
     use legion_core::{PlatformProfileVocabulary, TelemetryState};
-    use std::{cell::RefCell, collections::VecDeque};
 
     const MAXIMUM_SIZE: usize = 128;
     const OPENAT2_MAXIMUM_SIZE: usize = MAXIMUM_PLATFORM_PROFILE_BYTES;
@@ -759,44 +912,6 @@ mod tests {
 
     fn regular(value: &str) -> SimulatedEntry {
         SimulatedEntry::Regular(value.as_bytes().to_vec())
-    }
-
-    /// A fully in-memory sequence used only to prove the three-read coherence
-    /// rule. It cannot name a path or claim a real Linux provenance.
-    struct ChangingChoicesSource {
-        responses: RefCell<VecDeque<(PlatformProfileEntry, PlatformProfileSourceRead)>>,
-    }
-
-    impl ChangingChoicesSource {
-        fn new(responses: Vec<(PlatformProfileEntry, PlatformProfileSourceRead)>) -> Self {
-            Self {
-                responses: RefCell::new(responses.into()),
-            }
-        }
-    }
-
-    impl private::Sealed for ChangingChoicesSource {}
-
-    impl PlatformProfileByteSource for ChangingChoicesSource {
-        fn read(
-            &self,
-            entry: PlatformProfileEntry,
-            _maximum_size: usize,
-        ) -> Result<PlatformProfileSourceRead, PlatformProfileSourceError> {
-            let (expected_entry, response) = self
-                .responses
-                .borrow_mut()
-                .pop_front()
-                .expect("test sequence contains each expected read");
-            assert_eq!(entry, expected_entry, "coherence read order changed");
-            Ok(response)
-        }
-
-        fn origin(&self) -> LinuxPlatformProfileOrigin {
-            LinuxPlatformProfileOrigin::StaticSimulation {
-                root_label: "in-memory-consistency-test".to_owned(),
-            }
-        }
     }
 
     #[test]
@@ -1172,8 +1287,75 @@ mod tests {
     }
 
     #[test]
+    fn isolated_experiment_scenarios_are_closed_and_never_publish_linux_origin() {
+        for rejected in [
+            "/sys",
+            "/proc",
+            "/dev",
+            "--real",
+            "--sysfs",
+            "relative/path",
+        ] {
+            assert_eq!(isolated_platform_profile_scenario(rejected), None);
+        }
+
+        let valid =
+            run_isolated_platform_profile_experiment(IsolatedPlatformProfileScenario::Valid)
+                .unwrap();
+        assert!(matches!(
+            valid.origin,
+            LinuxPlatformProfileOrigin::StaticSimulation { .. }
+        ));
+        assert_eq!(
+            valid.profile.provenance.artifact,
+            TelemetryArtifact::StaticSimulation
+        );
+
+        assert!(matches!(
+            run_isolated_platform_profile_experiment(IsolatedPlatformProfileScenario::Symlink),
+            Err(LinuxPlatformProfileError::Source(
+                PlatformProfileSourceError::UnsafeEntry { .. }
+            ))
+        ));
+        assert!(matches!(
+            run_isolated_platform_profile_experiment(IsolatedPlatformProfileScenario::InvalidUtf8),
+            Err(LinuxPlatformProfileError::Source(
+                PlatformProfileSourceError::InvalidUtf8 { .. }
+            ))
+        ));
+        assert!(matches!(
+            run_isolated_platform_profile_experiment(IsolatedPlatformProfileScenario::TooLarge),
+            Err(LinuxPlatformProfileError::Source(
+                PlatformProfileSourceError::TooLarge { .. }
+            ))
+        ));
+        assert!(matches!(
+            run_isolated_platform_profile_experiment(IsolatedPlatformProfileScenario::Partial),
+            Err(LinuxPlatformProfileError::Source(
+                PlatformProfileSourceError::PartialRead { .. }
+            ))
+        ));
+        assert!(matches!(
+            run_isolated_platform_profile_experiment(
+                IsolatedPlatformProfileScenario::PermissionDenied
+            ),
+            Err(LinuxPlatformProfileError::Source(
+                PlatformProfileSourceError::PermissionDenied { .. }
+            ))
+        ));
+        assert!(matches!(
+            run_isolated_platform_profile_experiment(
+                IsolatedPlatformProfileScenario::ConcurrentChange
+            ),
+            Err(LinuxPlatformProfileError::Source(
+                PlatformProfileSourceError::ConcurrentChange
+            ))
+        ));
+    }
+
+    #[test]
     fn coherence_read_rejects_changed_choices_without_publishing_a_profile() {
-        let source = ChangingChoicesSource::new(vec![
+        let source = SequencedStaticSimulationSource::new(vec![
             (
                 PlatformProfileEntry::Choices,
                 PlatformProfileSourceRead::Complete(b"balanced performance\n".to_vec()),

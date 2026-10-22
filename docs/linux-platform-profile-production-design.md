@@ -110,6 +110,23 @@ solo publica `LinuxPlatformProfileReading` después de completar las tres
 lecturas, comprobar su coherencia y superar `PlatformProfileAdapter`. Si falla
 cualquier paso, devuelve un error sin publicar una lectura ni procedencia real.
 
+### Herramienta experimental aislada
+
+La Fase 5B.5B-3A añade el binario independiente
+`legion-linux-platform-profile-experiment` al paquete `legion-linux`. Solo
+admite los argumentos `--scenario` y `--format`, con una lista cerrada de
+escenarios embebidos. Reutiliza `LinuxPlatformProfileReader` y
+`PlatformProfileAdapter` con fuentes en memoria; no recibe directorio, ruta,
+descriptor, variable de entorno ni la capacidad de activación.
+
+Sus resultados se etiquetan como `isolated-static-simulation` y
+`static-simulation`; cuando son correctos, el resultado interno además usa
+`StaticSimulation`. Los escenarios de error conservan esa procedencia en la
+envoltura y no incluyen una lectura válida. Las opciones `--real`, `--sysfs`,
+`--root` y `--path` no forman parte de su gramática y se rechazan. El binario
+no está conectado a `legion-cli` ni convierte una simulación en una lectura
+Linux real.
+
 ### Apertura directa frente a árbol anclado
 
 | Alternativa | Ventaja | Riesgo o límite | Recomendación |
