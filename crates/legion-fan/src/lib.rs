@@ -13,6 +13,13 @@ use legion_core::{
 use serde::Serialize;
 use std::{collections::BTreeSet, fmt};
 
+mod fan_get_table;
+
+pub use fan_get_table::{
+    FanGetTableEvidence, FanGetTableEvidenceParser, FanGetTableParseError, FanTableEvidence,
+    OpaqueFanTableField, ParsedFanGetTable, documented_windows_table_evidence,
+};
+
 pub const DOCUMENTED_FAN_ID: u8 = 1;
 pub const DOCUMENTED_SENSOR_ID: u8 = 4;
 pub const WINDOWS_TABLE_POINT_COUNT: u8 = 10;
@@ -71,11 +78,14 @@ pub enum FanCurveSemantics {
     SyntheticNominalSimulation,
 }
 
-/// A table point may retain a nominal RPM without claiming a temperature axis.
+/// A table point may retain a configured target RPM without claiming a real RPM
+/// measurement. Its temperature coordinate is likewise a curve setpoint, not a
+/// live sensor reading.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FanCurvePoint {
     pub ordinal: u8,
-    pub nominal_rpm: Option<u32>,
+    pub temperature_setpoint_celsius: Option<u32>,
+    pub target_rpm: Option<u32>,
 }
 
 /// Immutable table representation. `write_capability` is intentionally
@@ -91,10 +101,10 @@ pub struct FanCurveTable {
 
 impl FanCurveTable {
     pub fn validate(&self) -> Result<(), FanBackendError> {
-        if self.points.len() != usize::from(WINDOWS_TABLE_POINT_COUNT) {
+        if self.points.is_empty() || self.points.len() > usize::from(WINDOWS_TABLE_POINT_COUNT) {
             return Err(FanBackendError::InvalidTable {
                 reason: format!(
-                    "expected {WINDOWS_TABLE_POINT_COUNT} points, got {}",
+                    "expected from 1 through {WINDOWS_TABLE_POINT_COUNT} points, got {}",
                     self.points.len()
                 ),
             });
@@ -108,7 +118,7 @@ impl FanCurveTable {
                     reason: "point ordinals must be unique values from 1 through 10".to_owned(),
                 });
             }
-            if let Some(rpm) = point.nominal_rpm
+            if let Some(rpm) = point.target_rpm
                 && rpm > OBSERVED_NOMINAL_RPM_UPPER_BOUND
             {
                 return Err(FanBackendError::InvalidTable {
@@ -176,7 +186,8 @@ impl FanTableReadTransport for SimulatedFanTransport {
                 (1..=WINDOWS_TABLE_POINT_COUNT)
                     .map(|ordinal| FanCurvePoint {
                         ordinal,
-                        nominal_rpm: None,
+                        temperature_setpoint_celsius: None,
+                        target_rpm: None,
                     })
                     .collect(),
                 WmiKnowledge::Observed,
@@ -186,7 +197,8 @@ impl FanTableReadTransport for SimulatedFanTransport {
                 (1..=WINDOWS_TABLE_POINT_COUNT)
                     .map(|ordinal| FanCurvePoint {
                         ordinal,
-                        nominal_rpm: Some(u32::from(ordinal) * 500),
+                        temperature_setpoint_celsius: Some(30 + u32::from(ordinal) * 5),
+                        target_rpm: Some(u32::from(ordinal) * 500),
                     })
                     .collect(),
                 WmiKnowledge::Hypothesis,
@@ -274,7 +286,7 @@ mod tests {
             .read_table(FanTableQuery::documented_windows_observation())
             .unwrap();
         assert_eq!(table.points.len(), 10);
-        assert!(table.points.iter().all(|point| point.nominal_rpm.is_none()));
+        assert!(table.points.iter().all(|point| point.target_rpm.is_none()));
         assert_eq!(table.semantics, FanCurveSemantics::OpaqueOrdinals);
         assert_eq!(
             table.provenance.artifact,
@@ -292,7 +304,7 @@ mod tests {
             table.semantics,
             FanCurveSemantics::SyntheticNominalSimulation
         );
-        assert_eq!(table.points.last().unwrap().nominal_rpm, Some(5_000));
+        assert_eq!(table.points.last().unwrap().target_rpm, Some(5_000));
         assert_eq!(table.provenance.knowledge, WmiKnowledge::Hypothesis);
     }
 
