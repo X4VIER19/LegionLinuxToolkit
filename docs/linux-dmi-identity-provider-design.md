@@ -12,13 +12,16 @@ El proveedor trabaja con un descriptor de directorio ya abierto y consulta solo
 cuatro nombres constantes mediante `openat2`:
 
 - `sys_vendor` para fabricante;
-- `product_version` como identificador de producto candidato;
-- `product_name` como modelo candidato;
+- `product_name` como identificador de producto;
+- `product_version` como modelo;
 - `bios_version` como BIOS.
 
-La asignación de `product_version` y `product_name` es una hipótesis de diseño,
-no una afirmación validada para el 83EX. Kernel y distribución no se adquieren
-en esta fase y permanecen ausentes para la evaluación posterior.
+Una lectura real autorizada en el 83EX con BIOS `NUCN15WW` observó
+`product_name=83EX` y `product_version=Legion Slim 5 16ARP9`. Por tanto, el
+proveedor conserva los nombres originales de sysfs y los asigna a esos campos
+internos según su significado observado. Esta evidencia no se extrapola a otros
+modelos ni BIOS. Kernel y distribución no se adquieren en esta fase y
+permanecen ausentes para la evaluación posterior.
 
 Cada apertura usa solo lectura (`O_RDONLY`, `O_CLOEXEC`, `O_NOFOLLOW`,
 `O_NONBLOCK`) y las restricciones `RESOLVE_BENEATH`,

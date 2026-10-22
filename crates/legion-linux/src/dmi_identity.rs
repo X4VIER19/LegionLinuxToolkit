@@ -27,8 +27,8 @@ const MAXIMUM_DMI_IDENTITY_BYTES: usize = 1024;
 /// symlink and is intentionally not accepted under `RESOLVE_NO_SYMLINKS`.
 const DMI_SYSFS_ROOT: &str = "/sys/devices/virtual/dmi/id";
 
-/// Fixed DMI attributes considered by the future provider. Their mapping is a
-/// design hypothesis until it is separately validated on the target computer.
+/// Fixed DMI attributes considered by the experimental provider. Their mapping
+/// reflects one documented, unverified observation on the target computer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DmiIdentityField {
     Manufacturer,
@@ -41,8 +41,10 @@ impl DmiIdentityField {
     const fn relative_name(self) -> &'static str {
         match self {
             Self::Manufacturer => "sys_vendor",
-            Self::ProductIdentifier => "product_version",
-            Self::Model => "product_name",
+            // Observed once on the target 83EX/NUCN15WW: `product_name` is
+            // the Lenovo product identifier and `product_version` the model.
+            Self::ProductIdentifier => "product_name",
+            Self::Model => "product_version",
             Self::BiosVersion => "bios_version",
         }
     }
@@ -224,9 +226,20 @@ impl ConfinedDmiIdentitySource {
         // sysfs attributes conventionally terminate a textual value with one
         // newline. Remove only that delimiter; any remaining control byte is
         // rejected later by `HostIdentity` validation.
+        let normalized = text.strip_suffix('\n').unwrap_or(&text).to_owned();
+        // The registry's documented vendor spelling is `Lenovo`; preserve raw
+        // bytes while applying this explicit canonical spelling only for the
+        // observed ASCII DMI value.
+        let normalized = if field == DmiIdentityField::Manufacturer
+            && normalized.eq_ignore_ascii_case("lenovo")
+        {
+            "Lenovo".to_owned()
+        } else {
+            normalized
+        };
         Ok(DmiAttributeEvidence {
             original: bytes,
-            normalized: text.strip_suffix('\n').unwrap_or(&text).to_owned(),
+            normalized,
         })
     }
 }
@@ -383,7 +396,11 @@ fn map_open_error(field: DmiIdentityField, error: Errno) -> DmiIdentityError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use legion_core::HostIdentityOrigin;
+    use legion_core::{
+        CompatibilityProfile, CompatibilityRegistry, DeviceDescriptor,
+        HostCompatibilityEnvironment, HostCompatibilityEvaluator, HostCompatibilityResult,
+        HostIdentityOrigin,
+    };
     use std::{
         fs,
         os::unix::fs::symlink,
@@ -404,9 +421,9 @@ mod tests {
     }
 
     fn write_valid_dmi_tree(path: &std::path::Path) {
-        fs::write(path.join("sys_vendor"), b"Lenovo\n").unwrap();
-        fs::write(path.join("product_version"), b"83EX\n").unwrap();
-        fs::write(path.join("product_name"), b"Legion Slim 5 16ARP9\n").unwrap();
+        fs::write(path.join("sys_vendor"), b"LENOVO\n").unwrap();
+        fs::write(path.join("product_name"), b"83EX\n").unwrap();
+        fs::write(path.join("product_version"), b"Legion Slim 5 16ARP9\n").unwrap();
         fs::write(path.join("bios_version"), b"NUCN15WW\n").unwrap();
     }
 
@@ -417,17 +434,61 @@ mod tests {
         )
     }
 
+    fn observed_lenovo_registry() -> CompatibilityRegistry {
+        CompatibilityRegistry {
+            profiles: vec![CompatibilityProfile {
+                id: "lenovo-legion-slim-5-16arp9-83ex-nucn15ww".to_owned(),
+                identity: DeviceDescriptor {
+                    manufacturer: "Lenovo".to_owned(),
+                    model: "Legion Slim 5 16ARP9".to_owned(),
+                    machine_type: "83EX".to_owned(),
+                    bios_version: "NUCN15WW".to_owned(),
+                    dmi_identifier: None,
+                },
+                capabilities: vec![],
+            }],
+        }
+    }
+
+    fn documented_environment() -> HostCompatibilityEnvironment {
+        HostCompatibilityEnvironment::declared_simulation(
+            "lenovo-legion-slim-5-16arp9-83ex-nucn15ww",
+            "7.2.0-202.nobara.fc44.x86_64",
+            "Nobara Linux",
+        )
+        .unwrap()
+    }
+
     #[test]
     fn confined_test_tree_produces_static_simulation_only() {
         let path = test_directory("valid");
         write_valid_dmi_tree(&path);
         let reading = provider(&path).read_once().unwrap();
         assert_eq!(reading.identity.manufacturer(), Some("Lenovo"));
-        assert_eq!(reading.evidence.manufacturer.original, b"Lenovo\n");
+        assert_eq!(reading.identity.product_identifier(), Some("83EX"));
+        assert_eq!(reading.identity.model(), Some("Legion Slim 5 16ARP9"));
+        assert_eq!(reading.evidence.manufacturer.original, b"LENOVO\n");
         assert_eq!(reading.evidence.manufacturer.normalized, "Lenovo");
         assert!(matches!(
             reading.identity.origin(),
             HostIdentityOrigin::StaticSimulation { label } if label == "dmi-test-tree"
+        ));
+        fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn observed_attribute_mapping_matches_the_strict_registry_before_environment_evidence() {
+        let path = test_directory("observed-lenovo-mapping");
+        write_valid_dmi_tree(&path);
+        let reading = provider(&path).read_once().unwrap();
+        let result =
+            HostCompatibilityEvaluator::new(&observed_lenovo_registry(), &documented_environment())
+                .evaluate(&reading.identity);
+
+        assert!(matches!(
+            result,
+            HostCompatibilityResult::InsufficientEvidence { missing_fields }
+                if missing_fields == ["kernel_version", "distribution"]
         ));
         fs::remove_dir_all(path).unwrap();
     }
@@ -452,7 +513,7 @@ mod tests {
     fn invalid_utf8_and_excessive_content_fail_before_identity_publication() {
         let invalid_path = test_directory("invalid-utf8");
         write_valid_dmi_tree(&invalid_path);
-        fs::write(invalid_path.join("product_name"), [0xff]).unwrap();
+        fs::write(invalid_path.join("product_version"), [0xff]).unwrap();
         assert!(matches!(
             provider(&invalid_path).read_once(),
             Err(LinuxHostIdentityError::Source(
@@ -464,7 +525,7 @@ mod tests {
         let large_path = test_directory("large");
         write_valid_dmi_tree(&large_path);
         fs::write(
-            large_path.join("product_name"),
+            large_path.join("product_version"),
             vec![b'x'; MAXIMUM_DMI_IDENTITY_BYTES + 1],
         )
         .unwrap();
@@ -481,8 +542,8 @@ mod tests {
     fn symbolic_links_are_rejected_without_following_them() {
         let path = test_directory("symlink");
         write_valid_dmi_tree(&path);
-        fs::remove_file(path.join("product_version")).unwrap();
-        symlink("/not-a-dmi-value", path.join("product_version")).unwrap();
+        fs::remove_file(path.join("product_name")).unwrap();
+        symlink("/not-a-dmi-value", path.join("product_name")).unwrap();
         assert!(matches!(
             provider(&path).read_once(),
             Err(LinuxHostIdentityError::Source(
