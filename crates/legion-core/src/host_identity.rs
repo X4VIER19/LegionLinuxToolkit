@@ -26,6 +26,7 @@ pub struct HostIdentityInput {
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum HostIdentityOrigin {
     StaticSimulation { label: String },
+    LinuxDmiObservedUnverified,
     HostObservationUnavailable,
 }
 
@@ -59,6 +60,22 @@ impl HostIdentity {
             kernel_version: validate_optional("kernel_version", input.kernel_version)?,
             distribution: validate_optional("distribution", input.distribution)?,
             origin: HostIdentityOrigin::StaticSimulation { label },
+        })
+    }
+
+    /// Creates an observed-but-unverified identity from a Linux DMI adapter.
+    /// It is intentionally not an authorization and cannot produce one.
+    pub fn observed_linux_dmi_unverified(
+        input: HostIdentityInput,
+    ) -> Result<Self, HostIdentityError> {
+        Ok(Self {
+            manufacturer: validate_optional("manufacturer", input.manufacturer)?,
+            product_identifier: validate_optional("product_identifier", input.product_identifier)?,
+            model: validate_optional("model", input.model)?,
+            bios_version: validate_optional("bios_version", input.bios_version)?,
+            kernel_version: validate_optional("kernel_version", input.kernel_version)?,
+            distribution: validate_optional("distribution", input.distribution)?,
+            origin: HostIdentityOrigin::LinuxDmiObservedUnverified,
         })
     }
 
@@ -152,6 +169,7 @@ impl HostCompatibilityEnvironment {
 #[serde(rename_all = "kebab-case")]
 pub enum HostIdentityVerification {
     UnverifiedStaticSimulation,
+    ObservedUnverifiedLinuxDmi,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -242,7 +260,12 @@ impl<'a> HostCompatibilityEvaluator<'a> {
                 HostCompatibilityResult::Compatible {
                     profile_id: profile.id,
                     origin: identity.origin.clone(),
-                    verification: HostIdentityVerification::UnverifiedStaticSimulation,
+                    verification: match identity.origin() {
+                        HostIdentityOrigin::LinuxDmiObservedUnverified => {
+                            HostIdentityVerification::ObservedUnverifiedLinuxDmi
+                        }
+                        _ => HostIdentityVerification::UnverifiedStaticSimulation,
+                    },
                 }
             }
             MatchResult::Incomplete { missing_fields } => {

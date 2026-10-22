@@ -90,9 +90,10 @@ impl From<HostIdentityError> for LinuxHostIdentityError {
 /// provider before that work is specifically reviewed.
 pub trait HostIdentitySource: private::Sealed {
     fn acquire(&self) -> Result<HostIdentityInput, HostIdentitySourceError>;
-
-    /// This phase permits only a diagnostic label for static simulation.
-    fn simulation_label(&self) -> &str;
+    fn construct_identity(
+        &self,
+        input: HostIdentityInput,
+    ) -> Result<HostIdentity, HostIdentityError>;
 }
 
 pub(crate) mod private {
@@ -116,7 +117,11 @@ where
 
     pub fn read_once(&self) -> Result<HostIdentity, LinuxHostIdentityError> {
         let input = self.source.acquire()?;
-        HostIdentity::declared_simulation(input, self.source.simulation_label()).map_err(Into::into)
+        self.source.construct_identity(input).map_err(Into::into)
+    }
+
+    pub fn source(&self) -> &S {
+        &self.source
     }
 }
 
@@ -149,8 +154,11 @@ impl HostIdentitySource for SimulatedLinuxHostIdentitySource {
         self.outcome.clone()
     }
 
-    fn simulation_label(&self) -> &str {
-        &self.label
+    fn construct_identity(
+        &self,
+        input: HostIdentityInput,
+    ) -> Result<HostIdentity, HostIdentityError> {
+        HostIdentity::declared_simulation(input, &self.label)
     }
 }
 

@@ -13,6 +13,12 @@ approved-real-platform-profile-read = []
 # Compiles the reviewed DMI acquisition shape, but intentionally exposes no
 # activation, root path, or real-host constructor.
 experimental-dmi-identity-read = []
+approved-real-dmi-identity-read = ["experimental-dmi-identity-read"]
+
+[[bin]]
+name = "legion-linux-dmi-identity-real-read"
+path = "src/bin/legion-linux-dmi-identity-real-read.rs"
+required-features = ["approved-real-dmi-identity-read"]
 
 [[bin]]
 name = "legion-linux-platform-profile-real-read"

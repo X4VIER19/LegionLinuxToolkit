@@ -11,11 +11,16 @@ use crate::{
     LinuxHostIdentityProvider,
 };
 use legion_core::HostIdentity;
+#[cfg(feature = "approved-real-dmi-identity-read")]
+use rustix::fs::CWD;
 use rustix::{
     fs::{FileType, Mode, OFlags, ResolveFlags, fstat, openat2},
     io::{Errno, read},
 };
-use std::{fmt, fs::File};
+use serde::Serialize;
+#[cfg(feature = "approved-real-dmi-identity-read")]
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::{cell::RefCell, fmt, fs::File};
 
 const MAXIMUM_DMI_IDENTITY_BYTES: usize = 1024;
 
@@ -76,6 +81,21 @@ pub enum DmiIdentityError {
     },
 }
 
+/// Original bytes and the normalized text consumed by `HostIdentity`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DmiAttributeEvidence {
+    pub original: Vec<u8>,
+    pub normalized: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DmiIdentityEvidence {
+    pub manufacturer: DmiAttributeEvidence,
+    pub product_identifier: DmiAttributeEvidence,
+    pub model: DmiAttributeEvidence,
+    pub bios_version: DmiAttributeEvidence,
+}
+
 impl fmt::Display for DmiIdentityError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -118,6 +138,8 @@ impl std::error::Error for DmiIdentityError {}
 struct ConfinedDmiIdentitySource {
     root: File,
     simulation_label: String,
+    evidence: RefCell<Option<DmiIdentityEvidence>>,
+    observed: bool,
 }
 
 impl ConfinedDmiIdentitySource {
@@ -126,10 +148,25 @@ impl ConfinedDmiIdentitySource {
         Self {
             root,
             simulation_label: simulation_label.into(),
+            evidence: RefCell::new(None),
+            observed: false,
         }
     }
 
-    fn read_field(&self, field: DmiIdentityField) -> Result<String, DmiIdentityError> {
+    #[cfg(feature = "approved-real-dmi-identity-read")]
+    fn from_linux_directory(root: File) -> Self {
+        Self {
+            root,
+            simulation_label: String::new(),
+            evidence: RefCell::new(None),
+            observed: true,
+        }
+    }
+
+    fn read_field(
+        &self,
+        field: DmiIdentityField,
+    ) -> Result<DmiAttributeEvidence, DmiIdentityError> {
         let file = openat2(
             &self.root,
             field.relative_name(),
@@ -179,11 +216,15 @@ impl ConfinedDmiIdentitySource {
                 }
             }
         }
-        let text = String::from_utf8(bytes).map_err(|_| DmiIdentityError::InvalidUtf8 { field })?;
+        let text = String::from_utf8(bytes.clone())
+            .map_err(|_| DmiIdentityError::InvalidUtf8 { field })?;
         // sysfs attributes conventionally terminate a textual value with one
         // newline. Remove only that delimiter; any remaining control byte is
         // rejected later by `HostIdentity` validation.
-        Ok(text.strip_suffix('\n').unwrap_or(&text).to_owned())
+        Ok(DmiAttributeEvidence {
+            original: bytes,
+            normalized: text.strip_suffix('\n').unwrap_or(&text).to_owned(),
+        })
     }
 }
 
@@ -199,18 +240,39 @@ impl HostIdentitySource for ConfinedDmiIdentitySource {
                 },
             })
         };
-        Ok(legion_core::HostIdentityInput {
-            manufacturer: Some(read(DmiIdentityField::Manufacturer)?),
-            product_identifier: Some(read(DmiIdentityField::ProductIdentifier)?),
-            model: Some(read(DmiIdentityField::Model)?),
-            bios_version: Some(read(DmiIdentityField::BiosVersion)?),
+        let evidence = DmiIdentityEvidence {
+            manufacturer: read(DmiIdentityField::Manufacturer)?,
+            product_identifier: read(DmiIdentityField::ProductIdentifier)?,
+            model: read(DmiIdentityField::Model)?,
+            bios_version: read(DmiIdentityField::BiosVersion)?,
+        };
+        let input = legion_core::HostIdentityInput {
+            manufacturer: Some(evidence.manufacturer.normalized.clone()),
+            product_identifier: Some(evidence.product_identifier.normalized.clone()),
+            model: Some(evidence.model.normalized.clone()),
+            bios_version: Some(evidence.bios_version.normalized.clone()),
             kernel_version: None,
             distribution: None,
-        })
+        };
+        *self.evidence.borrow_mut() = Some(evidence);
+        Ok(input)
     }
 
-    fn simulation_label(&self) -> &str {
-        &self.simulation_label
+    fn construct_identity(
+        &self,
+        input: legion_core::HostIdentityInput,
+    ) -> Result<HostIdentity, legion_core::HostIdentityError> {
+        if self.observed {
+            HostIdentity::observed_linux_dmi_unverified(input)
+        } else {
+            HostIdentity::declared_simulation(input, &self.simulation_label)
+        }
+    }
+}
+
+impl ConfinedDmiIdentitySource {
+    fn take_evidence(&self) -> Option<DmiIdentityEvidence> {
+        self.evidence.borrow_mut().take()
     }
 }
 
@@ -220,6 +282,12 @@ impl private::Sealed for ConfinedDmiIdentitySource {}
 /// keeps it impossible to instantiate outside tests, even with the feature.
 struct ExperimentalDmiIdentityProvider {
     provider: LinuxHostIdentityProvider<ConfinedDmiIdentitySource>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DmiIdentityReading {
+    pub identity: HostIdentity,
+    pub evidence: DmiIdentityEvidence,
 }
 
 impl ExperimentalDmiIdentityProvider {
@@ -232,8 +300,14 @@ impl ExperimentalDmiIdentityProvider {
         }
     }
 
-    fn read_once(&self) -> Result<HostIdentity, LinuxHostIdentityError> {
-        self.provider.read_once()
+    fn read_once(&self) -> Result<DmiIdentityReading, LinuxHostIdentityError> {
+        let identity = self.provider.read_once()?;
+        let evidence = self.provider.source().take_evidence().ok_or_else(|| {
+            LinuxHostIdentityError::Source(HostIdentitySourceError::Unavailable {
+                reason: "DMI source returned identity without evidence".to_owned(),
+            })
+        })?;
+        Ok(DmiIdentityReading { identity, evidence })
     }
 }
 
@@ -241,6 +315,52 @@ impl ExperimentalDmiIdentityProvider {
 /// adds exactly one approved activation value. This phase leaves it empty.
 #[allow(dead_code)]
 enum ApprovedDmiIdentityReadActivation {}
+
+#[cfg(feature = "approved-real-dmi-identity-read")]
+const REQUIRED_DMI_CONFIRMATION: &str = "I-UNDERSTAND-READ-ONLY-DMI";
+#[cfg(feature = "approved-real-dmi-identity-read")]
+static DMI_ONE_SHOT: AtomicBool = AtomicBool::new(false);
+
+/// Feature-gated, explicit, one-shot DMI acquisition. It opens one fixed DMI
+/// directory and has no path, retry, monitor, write, or authorization output.
+#[cfg(feature = "approved-real-dmi-identity-read")]
+pub fn approved_one_shot_dmi_identity_read(
+    confirmation: &str,
+) -> Result<DmiIdentityReading, LinuxHostIdentityError> {
+    if confirmation != REQUIRED_DMI_CONFIRMATION {
+        return Err(LinuxHostIdentityError::Source(
+            HostIdentitySourceError::Unavailable {
+                reason: "exact DMI confirmation is required".to_owned(),
+            },
+        ));
+    }
+    DMI_ONE_SHOT
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .map_err(|_| {
+            LinuxHostIdentityError::Source(HostIdentitySourceError::Unavailable {
+                reason: "DMI read was already attempted".to_owned(),
+            })
+        })?;
+    let root = openat2(
+        CWD,
+        "/sys/class/dmi/id",
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+        Mode::empty(),
+        ResolveFlags::NO_MAGICLINKS | ResolveFlags::NO_SYMLINKS,
+    )
+    .map(File::from)
+    .map_err(|error| {
+        LinuxHostIdentityError::Source(HostIdentitySourceError::Unavailable {
+            reason: format!("could not open fixed DMI directory: {error}"),
+        })
+    })?;
+    ExperimentalDmiIdentityProvider {
+        provider: LinuxHostIdentityProvider::new(ConfinedDmiIdentitySource::from_linux_directory(
+            root,
+        )),
+    }
+    .read_once()
+}
 
 fn map_open_error(field: DmiIdentityField, error: Errno) -> DmiIdentityError {
     match error {
@@ -298,10 +418,12 @@ mod tests {
     fn confined_test_tree_produces_static_simulation_only() {
         let path = test_directory("valid");
         write_valid_dmi_tree(&path);
-        let identity = provider(&path).read_once().unwrap();
-        assert_eq!(identity.manufacturer(), Some("Lenovo"));
+        let reading = provider(&path).read_once().unwrap();
+        assert_eq!(reading.identity.manufacturer(), Some("Lenovo"));
+        assert_eq!(reading.evidence.manufacturer.original, b"Lenovo\n");
+        assert_eq!(reading.evidence.manufacturer.normalized, "Lenovo");
         assert!(matches!(
-            identity.origin(),
+            reading.identity.origin(),
             HostIdentityOrigin::StaticSimulation { label } if label == "dmi-test-tree"
         ));
         fs::remove_dir_all(path).unwrap();
