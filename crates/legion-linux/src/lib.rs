@@ -28,6 +28,11 @@ use std::{
 
 mod host_identity;
 
+#[cfg(feature = "experimental-fan-wmi-transport")]
+pub mod fan_wmi_transport;
+#[cfg(all(test, not(feature = "experimental-fan-wmi-transport")))]
+mod fan_wmi_transport;
+
 #[cfg(any(
     test,
     feature = "experimental-dmi-identity-read",
