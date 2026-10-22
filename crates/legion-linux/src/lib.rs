@@ -27,6 +27,7 @@ use std::{
 };
 
 mod host_identity;
+mod offline_fan_response;
 
 #[cfg(any(
     feature = "experimental-fan-wmi-transport",
@@ -52,6 +53,10 @@ mod dmi_identity;
 pub use host_identity::{
     HostIdentityField, HostIdentitySource, HostIdentitySourceError, LinuxHostIdentityError,
     LinuxHostIdentityProvider, SimulatedLinuxHostIdentitySource,
+};
+pub use offline_fan_response::{
+    OfflineFanResponseAnalysis, OfflineFanResponseError, OfflineFanResponseProvenance,
+    analyze_offline_fan_response_file,
 };
 
 #[cfg(any(

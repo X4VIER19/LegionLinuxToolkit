@@ -1,7 +1,8 @@
-//! Decoder for injected bytes of the proposed binary fan kernel endpoint.
+//! Decoder for already-acquired bytes of the proposed binary fan kernel endpoint.
 //!
-//! No endpoint exists at runtime in this phase. The decoder has no filesystem
-//! or device APIs and always marks its parsed input as a static simulation.
+//! The decoder has no filesystem or device APIs. Acquisition provenance is
+//! deliberately kept outside this module: callers must not turn parsed bytes
+//! into a claim about the source that produced them.
 
 use crate::{
     FAN_GET_TABLE_RESPONSE_SIZE_BYTES, FAN_KERNEL_READ_CONTRACT_HEADER_SIZE_BYTES,
@@ -13,6 +14,18 @@ use std::fmt;
 
 pub const FAN_KERNEL_ENDPOINT_RESPONSE_SIZE_BYTES: usize =
     FAN_KERNEL_READ_CONTRACT_HEADER_SIZE_BYTES as usize + FAN_GET_TABLE_RESPONSE_SIZE_BYTES;
+
+/// A validated, lossless version-one endpoint response. This describes bytes
+/// already obtained by a caller; it does not describe their provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedKernelFanEndpointResponse {
+    pub original: [u8; FAN_KERNEL_ENDPOINT_RESPONSE_SIZE_BYTES],
+    pub version: u16,
+    pub header_size: u16,
+    pub status: KernelFanReadStatus,
+    pub payload_size: usize,
+    pub fat2: crate::DecodedFanGetTableResponse,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KernelFanEndpointError {
@@ -43,17 +56,20 @@ impl fmt::Display for KernelFanEndpointError {
 
 impl std::error::Error for KernelFanEndpointError {}
 
-/// Decodes one fully acquired fixture of the binary endpoint contract.
-/// Truncated data, unknown statuses, and contract errors never produce a
-/// successful result.
-pub fn consume_simulated_kernel_endpoint_bytes(
+/// Decodes one fully acquired binary endpoint response. Truncated data,
+/// unknown statuses, and contract or FAT2 errors never produce a successful
+/// result. This function performs no acquisition and assigns no provenance.
+pub fn decode_kernel_endpoint_bytes(
     bytes: &[u8],
-) -> Result<SimulatedKernelFanReadResult, KernelFanEndpointError> {
+) -> Result<DecodedKernelFanEndpointResponse, KernelFanEndpointError> {
     if bytes.len() != FAN_KERNEL_ENDPOINT_RESPONSE_SIZE_BYTES {
         return Err(KernelFanEndpointError::UnexpectedWireLength {
             actual: bytes.len(),
         });
     }
+    let original: [u8; FAN_KERNEL_ENDPOINT_RESPONSE_SIZE_BYTES] = bytes
+        .try_into()
+        .expect("wire length was checked against the fixed contract size");
     let version = u16::from_le_bytes([bytes[0], bytes[1]]);
     let header_size = u16::from_le_bytes([bytes[2], bytes[3]]);
     let raw_status = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
@@ -66,16 +82,54 @@ pub fn consume_simulated_kernel_endpoint_bytes(
         });
     }
 
-    let response = SimulatedKernelFanReadResponse {
+    if version != crate::FAN_KERNEL_READ_CONTRACT_VERSION {
+        return Err(KernelFanEndpointError::Contract(
+            KernelFanReadContractError::UnsupportedVersion { actual: version },
+        ));
+    }
+    if header_size != FAN_KERNEL_READ_CONTRACT_HEADER_SIZE_BYTES {
+        return Err(KernelFanEndpointError::Contract(
+            KernelFanReadContractError::UnexpectedHeaderSize {
+                actual: header_size,
+            },
+        ));
+    }
+    if status != KernelFanReadStatus::Ok {
+        return Err(KernelFanEndpointError::Contract(
+            KernelFanReadContractError::Status(status),
+        ));
+    }
+    let payload = &original[FAN_KERNEL_READ_CONTRACT_HEADER_SIZE_BYTES as usize
+        ..FAN_KERNEL_READ_CONTRACT_HEADER_SIZE_BYTES as usize + payload_size];
+    let fat2 = crate::decode_confirmed_83ex_fan_get_table_response(payload)
+        .map_err(KernelFanReadContractError::Abi)
+        .map_err(KernelFanEndpointError::Contract)?;
+    Ok(DecodedKernelFanEndpointResponse {
+        original,
         version,
         header_size,
         status,
         payload_size,
-        payload: bytes[FAN_KERNEL_READ_CONTRACT_HEADER_SIZE_BYTES as usize
-            ..FAN_KERNEL_READ_CONTRACT_HEADER_SIZE_BYTES as usize + payload_size]
-            .to_vec(),
+        fat2,
+    })
+}
+
+/// Decodes one fully acquired fixture and attaches its fixed simulation
+/// provenance. Real or offline acquisition belongs in a different adapter.
+pub fn consume_simulated_kernel_endpoint_bytes(
+    bytes: &[u8],
+) -> Result<SimulatedKernelFanReadResult, KernelFanEndpointError> {
+    let decoded = decode_kernel_endpoint_bytes(bytes)?;
+    let response = SimulatedKernelFanReadResponse {
+        version: decoded.version,
+        header_size: decoded.header_size,
+        status: decoded.status,
+        payload_size: decoded.payload_size,
+        payload: decoded.fat2.original.to_vec(),
         provenance: TelemetryArtifact::StaticSimulation,
     };
+    // Keep the existing simulation-only contract boundary as a regression
+    // check. It should be equivalent to the provenance-neutral decoder above.
     consume_simulated_kernel_fan_read(response).map_err(KernelFanEndpointError::Contract)
 }
 
@@ -115,6 +169,15 @@ mod tests {
             TelemetryArtifact::StaticSimulation
         );
         assert_eq!(result.decoded.original.len(), 88);
+    }
+
+    #[test]
+    fn neutral_decoder_keeps_the_complete_original_wire_response() {
+        let bytes = endpoint_fixture(FAN_KERNEL_READ_CONTRACT_VERSION, 0, 88);
+        let decoded = decode_kernel_endpoint_bytes(&bytes).unwrap();
+        assert_eq!(decoded.original.as_slice(), bytes);
+        assert_eq!(decoded.fat2.fan_table_size, 10);
+        assert_eq!(decoded.fat2.sensor_table_size, 10);
     }
 
     #[test]

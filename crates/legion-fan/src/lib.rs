@@ -35,8 +35,8 @@ pub use kernel_contract::{
     SimulatedKernelFanReadResult, consume_simulated_kernel_fan_read,
 };
 pub use kernel_endpoint::{
-    FAN_KERNEL_ENDPOINT_RESPONSE_SIZE_BYTES, KernelFanEndpointError,
-    consume_simulated_kernel_endpoint_bytes,
+    DecodedKernelFanEndpointResponse, FAN_KERNEL_ENDPOINT_RESPONSE_SIZE_BYTES,
+    KernelFanEndpointError, consume_simulated_kernel_endpoint_bytes, decode_kernel_endpoint_bytes,
 };
 pub use wmi_adapter::{
     FanTableWmiAdapter, FanTableWmiError, FanTableWmiEvidenceError, SimulatedFanTableWmiResult,

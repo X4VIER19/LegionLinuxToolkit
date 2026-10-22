@@ -17,7 +17,7 @@ approved-real-dmi-identity-read = ["experimental-dmi-identity-read"]
 # Compiles an unconstructable fan-WMI transport shape only. It has no host
 # constructor and always fails closed: a supported kernel-space WMI driver is
 # still required before any firmware call can be considered.
-experimental-fan-wmi-transport = ["dep:legion-fan"]
+experimental-fan-wmi-transport = []
 # Builds a planning-only entry point. It cannot invoke the transport or reach
 # a host WMI device, and is never enabled by default.
 experimental-fan-wmi-read = ["experimental-fan-wmi-transport"]
@@ -37,16 +37,19 @@ name = "legion-linux-fan-wmi-read-experiment"
 path = "src/bin/legion-linux-fan-wmi-read-experiment.rs"
 required-features = ["experimental-fan-wmi-read"]
 
+[[bin]]
+name = "legion-linux-fan-response-analyzer"
+path = "src/bin/legion-linux-fan-response-analyzer.rs"
+
 [dependencies]
 legion-core = { path = "../legion-core" }
-legion-fan = { path = "../legion-fan", optional = true }
+legion-fan = { path = "../legion-fan" }
 rustix = { version = "1.1.5", features = ["fs"] }
 serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
 legion-fixtures = { path = "../legion-fixtures" }
-legion-fan = { path = "../legion-fan" }
 
 [lints]
 workspace = true
