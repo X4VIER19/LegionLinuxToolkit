@@ -5,6 +5,16 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
+[features]
+# Opt-in forwarding only. Normal legion-cli builds retain exclusively
+# simulated sources and cannot compile the experimental real-read binary.
+approved-real-platform-profile-read = ["legion-linux/approved-real-platform-profile-read"]
+
+[[bin]]
+name = "legion-cli-platform-profile-real-read"
+path = "src/bin/legion-cli-platform-profile-real-read.rs"
+required-features = ["approved-real-platform-profile-read"]
+
 [dependencies]
 legion-core = { path = "../legion-core" }
 legion-fixtures = { path = "../legion-fixtures" }

@@ -265,7 +265,8 @@ debe seguir siendo puntual y explícita, como ocurrió con el primer hito.
 | 5C.2 (actual) | Interfaz `read_once()` y pruebas exclusivamente simuladas. | Sin proveedor real nuevo ni dependencia de `legion-cli` sobre sysfs. |
 | 5C.3 (actual) | Integrar `legion-cli platform-profile` con la consulta compartida y escenarios embebidos. | Solo `StaticSimulation`; la CLI no puede construir el proveedor sysfs ni seleccionar rutas. |
 | 5C.4 | Proponer integración explícita de CLI/GUI y cambio estrecho de `AGENTS.md`. | Revisión de diff, autorización independiente y sin escritura. |
-| 5C.5 | Validación manual autorizada por entorno y decisión de estabilidad. | Cada lectura real se aprueba por separado hasta que se cambien las reglas. |
+| 5C.5 (actual) | Preparar un binario CLI experimental condicionado por feature y una puerta de compatibilidad estática cerrada. | Sin ejecución real; la puerta no detecta el host ni verifica DMI. |
+| 5C.5B | Validación manual autorizada por entorno y decisión de estabilidad. | Cada lectura real se aprueba por separado hasta que se cambien las reglas. |
 | 5C.6 | Declaración de soporte o conservación como experimental. | Solo tras satisfacer criterios de aceptación y revisión de seguridad. |
 
 ## Riesgos que permanecen
