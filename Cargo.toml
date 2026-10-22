@@ -3,6 +3,7 @@ members = [
     "crates/legion-core",
     "crates/legion-cli",
     "crates/legion-fixtures",
+    "crates/legion-fan",
     "crates/legion-linux",
 ]
 resolver = "2"

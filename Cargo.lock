@@ -43,6 +43,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "legion-fan"
+version = "0.1.0"
+dependencies = [
+ "legion-core",
+ "serde",
+]
+
+[[package]]
 name = "legion-fixtures"
 version = "0.1.0"
 dependencies = [
