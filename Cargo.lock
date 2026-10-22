@@ -54,6 +54,7 @@ name = "legion-linux"
 version = "0.1.0"
 dependencies = [
  "legion-core",
+ "legion-fixtures",
  "rustix",
  "serde",
  "serde_json",

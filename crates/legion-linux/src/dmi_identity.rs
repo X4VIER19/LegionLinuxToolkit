@@ -10,7 +10,10 @@ use crate::{
     HostIdentityField, HostIdentitySource, HostIdentitySourceError, LinuxHostIdentityError,
     LinuxHostIdentityProvider,
 };
-use legion_core::HostIdentity;
+use legion_core::{
+    CompatibilityRegistry, HostCompatibilityEnvironment, HostCompatibilityEvaluator,
+    HostCompatibilityResult, HostIdentity,
+};
 #[cfg(feature = "approved-real-dmi-identity-read")]
 use rustix::fs::CWD;
 use rustix::{
@@ -306,6 +309,20 @@ pub struct DmiIdentityReading {
     pub evidence: DmiIdentityEvidence,
 }
 
+impl DmiIdentityReading {
+    /// Evaluates this observed-but-unverified DMI identity against caller-supplied
+    /// declarative compatibility data. This delegates all matching rules to
+    /// `legion-core`; it neither verifies the physical host nor authorizes a
+    /// hardware operation.
+    pub fn evaluate_compatibility(
+        &self,
+        registry: &CompatibilityRegistry,
+        environment: &HostCompatibilityEnvironment,
+    ) -> HostCompatibilityResult {
+        HostCompatibilityEvaluator::new(registry, environment).evaluate(&self.identity)
+    }
+}
+
 impl ExperimentalDmiIdentityProvider {
     #[cfg(test)]
     fn from_test_directory(root: File, simulation_label: impl Into<String>) -> Self {
@@ -396,11 +413,8 @@ fn map_open_error(field: DmiIdentityField, error: Errno) -> DmiIdentityError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use legion_core::{
-        CompatibilityProfile, CompatibilityRegistry, DeviceDescriptor,
-        HostCompatibilityEnvironment, HostCompatibilityEvaluator, HostCompatibilityResult,
-        HostIdentityOrigin,
-    };
+    use legion_core::{HostCompatibilityResult, HostIdentityOrigin};
+    use legion_fixtures::{known_host_compatibility_environment, legion_slim_5_16arp9_registry};
     use std::{
         fs,
         os::unix::fs::symlink,
@@ -434,31 +448,6 @@ mod tests {
         )
     }
 
-    fn observed_lenovo_registry() -> CompatibilityRegistry {
-        CompatibilityRegistry {
-            profiles: vec![CompatibilityProfile {
-                id: "lenovo-legion-slim-5-16arp9-83ex-nucn15ww".to_owned(),
-                identity: DeviceDescriptor {
-                    manufacturer: "Lenovo".to_owned(),
-                    model: "Legion Slim 5 16ARP9".to_owned(),
-                    machine_type: "83EX".to_owned(),
-                    bios_version: "NUCN15WW".to_owned(),
-                    dmi_identifier: None,
-                },
-                capabilities: vec![],
-            }],
-        }
-    }
-
-    fn documented_environment() -> HostCompatibilityEnvironment {
-        HostCompatibilityEnvironment::declared_simulation(
-            "lenovo-legion-slim-5-16arp9-83ex-nucn15ww",
-            "7.2.0-202.nobara.fc44.x86_64",
-            "Nobara Linux",
-        )
-        .unwrap()
-    }
-
     #[test]
     fn confined_test_tree_produces_static_simulation_only() {
         let path = test_directory("valid");
@@ -481,9 +470,9 @@ mod tests {
         let path = test_directory("observed-lenovo-mapping");
         write_valid_dmi_tree(&path);
         let reading = provider(&path).read_once().unwrap();
-        let result =
-            HostCompatibilityEvaluator::new(&observed_lenovo_registry(), &documented_environment())
-                .evaluate(&reading.identity);
+        let registry = legion_slim_5_16arp9_registry();
+        let environment = known_host_compatibility_environment();
+        let result = reading.evaluate_compatibility(&registry, &environment);
 
         assert!(matches!(
             result,

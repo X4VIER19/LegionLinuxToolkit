@@ -14,3 +14,8 @@ verifica por sí solo la identidad física ni habilita `RealReadAuthorization`.
 Por ello el proveedor asigna `product_name` al identificador de producto y
 `product_version` al modelo para este equipo documentado. Es una observación
 del 83EX con `NUCN15WW`, no una regla extrapolable a otros modelos o BIOS.
+
+La evaluación reutiliza el `CompatibilityRegistry` declarativo existente. Con
+solo estos cuatro atributos, una coincidencia de fabricante, identificador,
+modelo y BIOS sigue siendo evidencia insuficiente: DMI no aporta kernel ni
+distribución y no convierte la identidad en verificada.
