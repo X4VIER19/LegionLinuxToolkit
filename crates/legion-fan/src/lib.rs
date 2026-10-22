@@ -15,6 +15,7 @@ use std::{collections::BTreeSet, fmt};
 
 mod fan_get_table;
 mod wmi_adapter;
+mod wmi_schema;
 
 pub use fan_get_table::{
     FanGetTableEvidence, FanGetTableEvidenceParser, FanGetTableParseError, FanTableEvidence,
@@ -22,6 +23,12 @@ pub use fan_get_table::{
 };
 pub use wmi_adapter::{
     FanTableWmiAdapter, FanTableWmiError, FanTableWmiEvidenceError, SimulatedFanTableWmiResult,
+};
+pub use wmi_schema::{
+    ConfirmedFanGetTableSchema, FAN_GET_TABLE_METHOD_ID, FAN_SET_TABLE_METHOD_ID,
+    FanSetTableInvocation, KnownFanSetTableMetadata, LENOVO_FAN_METHOD_CLASS,
+    LENOVO_FAN_METHOD_GUID, LinuxAcpiAbiBoundary, WmiSchemaParameter, WmiSchemaParameterDirection,
+    WmiSchemaValueType, confirmed_83ex_fan_get_table_schema, known_83ex_fan_set_table_metadata,
 };
 
 pub const DOCUMENTED_FAN_ID: u8 = 1;

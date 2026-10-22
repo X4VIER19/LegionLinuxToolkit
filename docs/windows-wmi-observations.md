@@ -17,6 +17,22 @@ ni evidencia de compatibilidad de un método WMI en Linux.
 - `Fan_Get_Table`: funcional en Windows.
 - `Fan_Set_Table`: existe, pero no se ha probado y queda prohibido en esta fase.
 
+## Esquema confirmado del 83EX
+
+Los metadatos de `LENOVO_FAN_METHOD` obtenidos directamente en Windows para el
+83EX con BIOS `NUCN15WW` confirman el siguiente esquema WMI/CIM:
+
+- `Fan_Get_Table`: `WmiMethodId=5`; entradas `FanID: UInt8` y
+  `SensorID: UInt8`; salidas `FanTable: UInt32Array`, `FanTableSize: UInt32`,
+  `SensorTable: UInt32Array` y `SensorTableSize: UInt32`.
+- `Fan_Set_Table`: `WmiMethodId=6`; entrada `FanTable: UInt8Array`.
+
+Esta evidencia confirma nombres, tipos CIM y los IDs WMI para el entorno
+Windows documentado. No confirma el empaquetado de los argumentos en ACPI,
+la codificación ni longitud de una respuesta Linux, ni autoriza llamadas a
+ninguno de los métodos. `Fan_Set_Table` sigue prohibido y se registra solo
+como metadato.
+
 Con `FanID=1` y `SensorID=4`, `Fan_Get_Table` devolvió dos tablas de diez
 valores, en ambos arreglos con índices de 1 a 10. También se recuperaron 15
 tablas mediante `LENOVO_FAN_TABLE_DATA`, con valores nominales de hasta 5000

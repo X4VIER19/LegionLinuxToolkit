@@ -4,8 +4,9 @@
 //! and the opaque response is preserved without decoding its bytes.
 
 use crate::{
-    FanGetTableEvidence, FanGetTableEvidenceParser, FanGetTableParseError, FanTableProvenance,
-    FanTableQuery, ParsedFanGetTable,
+    ConfirmedFanGetTableSchema, FanGetTableEvidence, FanGetTableEvidenceParser,
+    FanGetTableParseError, FanTableProvenance, FanTableQuery, ParsedFanGetTable,
+    confirmed_83ex_fan_get_table_schema,
 };
 use legion_core::{
     TelemetryArtifact, WmiAccess, WmiArgument, WmiArtifact, WmiKnowledge, WmiMethodMetadata,
@@ -17,6 +18,9 @@ use std::fmt;
 /// separately interpreted evidence. Neither is a firmware response claim.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SimulatedFanTableWmiResult {
+    /// Windows schema confirmed for this target. This does not specify the
+    /// Linux/ACPI byte encoding used by a future transport.
+    pub schema: ConfirmedFanGetTableSchema,
     pub response: WmiResponse,
     pub parsed: ParsedFanGetTable,
 }
@@ -60,7 +64,11 @@ impl<T: WmiTransport> FanTableWmiAdapter<T> {
         evidence.provenance = fan_provenance(&response.provenance);
         let parsed =
             FanGetTableEvidenceParser::parse(evidence).map_err(FanTableWmiError::Interpretation)?;
-        Ok(SimulatedFanTableWmiResult { response, parsed })
+        Ok(SimulatedFanTableWmiResult {
+            schema: confirmed_83ex_fan_get_table_schema(),
+            response,
+            parsed,
+        })
     }
 }
 
@@ -241,6 +249,8 @@ mod tests {
             result.parsed.original.provenance.knowledge,
             WmiKnowledge::Unknown
         );
+        assert_eq!(result.schema.wmi_method_id, 5);
+        assert_eq!(result.schema.linux_acpi_abi.response_size_bytes, None);
     }
 
     #[test]
