@@ -9,11 +9,12 @@ fase.
 
 ## Estado de seguridad
 
-El archivo C **no registra** un `wmi_driver`: no declara rutas de
-inicialización, `probe`, eliminación o apagado. La única función de lectura es
-un marcador deshabilitado que devuelve `-EOPNOTSUPP` antes de poder invocar una
-API WMI. Por tanto, este esqueleto no evalúa métodos ACPI/WMI, ni al cargarse ni
-por ningún otro camino ejecutable.
+El archivo C **no registra** un `wmi_driver`, no emite un alias WMI para carga
+automática y no declara `probe`, eliminación ni apagado de WMI. Sus funciones
+de inicialización y salida gestionan exclusivamente el ciclo de vida del
+`miscdevice` experimental. La única función de lectura devuelve
+`-EOPNOTSUPP` antes de poder invocar una API WMI. Por tanto, este módulo no
+evalúa métodos ACPI/WMI, ni al cargarse ni por ningún otro camino ejecutable.
 
 No existe API de usuario, atributo sysfs, interfaz de escritura, control de RPM
 ni soporte para `Fan_Set_Table`.
@@ -32,12 +33,13 @@ otra API ejecutable. Si una fase futura autorizase una interfaz concreta, esta
 deberá conservar el versionado, el límite exacto y la separación de errores,
 sin añadir operaciones de escritura.
 
-La Fase 6Q describe un `miscdevice` binario como mecanismo candidato: tendría
-una única operación `read` y entregaría exactamente una estructura de 100 bytes
-(`12` de cabecera y `88` de carga) por consulta. Por ahora solo existe su
-metadato privado y la operación devuelve `-EOPNOTSUPP`; no se llama a
-`misc_register()`, así que no se publica un nodo de dispositivo. Las respuestas
-sintéticas solo existen en fixtures Rust y se etiquetan como simulación.
+La Fase 6R prepara el ciclo de vida de un `miscdevice` binario llamado
+`legion-fan-read-experimental`. Tiene únicamente una operación `read`; no tiene
+escrituras ni `ioctl`. Si alguien lo cargara en una fase futura autorizada, el
+nodo se registraría y cada lectura devolvería exclusivamente `-EOPNOTSUPP`.
+No entrega datos FAT2, no controla ventiladores y no accede a WMI. Las
+respuestas sintéticas solo existen en fixtures Rust y se etiquetan como
+simulación. Este repositorio no instala el módulo ni habilita carga automática.
 
 ## Compilación aislada validada
 

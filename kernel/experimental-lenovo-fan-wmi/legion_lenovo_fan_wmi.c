@@ -2,8 +2,9 @@
 /*
  * Deliberately disabled Lenovo Legion fan WMI skeleton.
  *
- * This file is not registered as a wmi_driver and has no module init, probe,
- * remove, shutdown, or firmware-evaluation path.  Its disabled helper always
+ * This file is not registered as a wmi_driver and has no probe, remove,
+ * shutdown, or firmware-evaluation path. Its init and exit functions manage
+ * only the experimental read-only miscdevice. Its disabled WMI helper always
  * returns -EOPNOTSUPP before any WMI method could be evaluated.
  *
  * It records evidence specific to Lenovo Legion Slim 5 16ARP9 (83EX), BIOS
@@ -49,12 +50,10 @@ static_assert(sizeof(struct legion_fan_get_table_request) ==
 static_assert(sizeof(struct legion_fan_get_table_fat2) ==
 	      LENOVO_FAN_GET_TABLE_FAT2_BYTES);
 
-/* Metadata only: this does not bind or register a WMI driver. */
-static const struct wmi_device_id legion_fan_wmi_id_table[] = {
-	{ .guid_string = LENOVO_FAN_WMI_GUID },
-	{}
-};
-MODULE_DEVICE_TABLE(wmi, legion_fan_wmi_id_table);
+/*
+ * Metadata only. Deliberately do not emit a WMI modalias: this module must not
+ * be automatically loaded in response to the Lenovo GUID.
+ */
 
 /*
  * Deliberately unavailable. A future reviewed implementation must add its own
@@ -72,12 +71,7 @@ legion_fan_wmi_read_once_disabled(struct wmi_device *wdev,
 	return -EOPNOTSUPP;
 }
 
-/*
- * Proposed binary endpoint, intentionally unpublished. No misc_register()
- * call exists in this skeleton, so no device node can be created. If a future
- * phase registers it, reads still fail closed until its separately reviewed
- * WMI acquisition path is implemented.
- */
+/* Proposed binary endpoint. Reads fail closed without firmware access. */
 static ssize_t legion_fan_endpoint_read_disabled(struct file *file,
 					 char __user *buffer, size_t count,
 					 loff_t *offset)
@@ -96,12 +90,25 @@ static const struct file_operations legion_fan_endpoint_fops = {
 	.llseek = noop_llseek,
 };
 
-/* Metadata only: it is never passed to misc_register(). */
-static struct miscdevice legion_fan_endpoint __maybe_unused = {
+static struct miscdevice legion_fan_endpoint = {
 	.minor = MISC_DYNAMIC_MINOR,
 	.name = "legion-fan-read-experimental",
 	.fops = &legion_fan_endpoint_fops,
 };
+
+/* No WMI driver is registered and no WMI method is evaluated here. */
+static int __init legion_fan_endpoint_init(void)
+{
+	return misc_register(&legion_fan_endpoint);
+}
+
+static void __exit legion_fan_endpoint_exit(void)
+{
+	misc_deregister(&legion_fan_endpoint);
+}
+
+module_init(legion_fan_endpoint_init);
+module_exit(legion_fan_endpoint_exit);
 
 MODULE_DESCRIPTION("Disabled LegionLinuxToolkit Lenovo fan WMI reader skeleton");
 MODULE_LICENSE("GPL");
