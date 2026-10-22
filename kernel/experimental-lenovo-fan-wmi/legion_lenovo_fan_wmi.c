@@ -16,11 +16,13 @@
 #include <linux/types.h>
 #include <linux/wmi.h>
 
+#include "legion_fan_read_contract.h"
+
 #define LENOVO_FAN_WMI_GUID "92549549-4BDE-4F06-AC04-CE8BF898DBAA"
 #define LENOVO_FAN_WMI_INSTANCE 0
 #define LENOVO_FAN_GET_TABLE_METHOD 5
 #define LENOVO_FAN_GET_TABLE_INPUT_BYTES 2
-#define LENOVO_FAN_GET_TABLE_FAT2_BYTES 88
+#define LENOVO_FAN_GET_TABLE_FAT2_BYTES LEGION_FAN_READ_FAT2_BYTES
 #define LENOVO_FAN_GET_TABLE_POINTS 10
 
 /* Confirmed AML input order: [FanID, SensorID]. */

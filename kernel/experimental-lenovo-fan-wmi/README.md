@@ -18,6 +18,20 @@ por ningún otro camino ejecutable.
 No existe API de usuario, atributo sysfs, interfaz de escritura, control de RPM
 ni soporte para `Fan_Set_Table`.
 
+## Contrato propuesto con espacio de usuario
+
+`legion_fan_read_contract.h` define la versión 1 de un posible contrato de
+**solo lectura**, compartido conceptualmente con el adaptador Rust. Describe
+una respuesta de versión, tamaño de cabecera, clasificación de estado, tamaño
+de carga y 88 bytes opacos de `FAT2`. Los estados distinguen: no compatible,
+fallo de transporte, respuesta ACPI inválida y ABI inválido. Ninguno es una
+lectura válida y ninguno contiene una interpretación física de los valores.
+
+El encabezado no crea sysfs, procfs, debugfs, dispositivos de caracteres ni
+otra API ejecutable. Si una fase futura autorizase una interfaz concreta, esta
+deberá conservar el versionado, el límite exacto y la separación de errores,
+sin añadir operaciones de escritura.
+
 ## Compilación aislada validada
 
 La compilación se validó una vez, en una copia temporal del directorio, contra
