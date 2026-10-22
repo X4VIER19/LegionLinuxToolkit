@@ -23,6 +23,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::{cell::RefCell, fmt, fs::File};
 
 const MAXIMUM_DMI_IDENTITY_BYTES: usize = 1024;
+/// Fixed canonical device path; the `/sys/class/dmi/id` class entry may be a
+/// symlink and is intentionally not accepted under `RESOLVE_NO_SYMLINKS`.
+const DMI_SYSFS_ROOT: &str = "/sys/devices/virtual/dmi/id";
 
 /// Fixed DMI attributes considered by the future provider. Their mapping is a
 /// design hypothesis until it is separately validated on the target computer.
@@ -343,7 +346,7 @@ pub fn approved_one_shot_dmi_identity_read(
         })?;
     let root = openat2(
         CWD,
-        "/sys/class/dmi/id",
+        DMI_SYSFS_ROOT,
         OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
         Mode::empty(),
         ResolveFlags::NO_MAGICLINKS | ResolveFlags::NO_SYMLINKS,
@@ -487,5 +490,11 @@ mod tests {
             ))
         ));
         fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn fixed_dmi_root_avoids_the_class_symlink_namespace() {
+        assert_eq!(DMI_SYSFS_ROOT, "/sys/devices/virtual/dmi/id");
+        assert!(!DMI_SYSFS_ROOT.contains("/class/"));
     }
 }
