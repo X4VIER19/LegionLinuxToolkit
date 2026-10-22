@@ -10,6 +10,9 @@ authors.workspace = true
 # separately reviewed, one-shot experimental binary; it must not be used by
 # normal builds, tests, or legion-cli.
 approved-real-platform-profile-read = []
+# Compiles the reviewed DMI acquisition shape, but intentionally exposes no
+# activation, root path, or real-host constructor.
+experimental-dmi-identity-read = []
 
 [[bin]]
 name = "legion-linux-platform-profile-real-read"

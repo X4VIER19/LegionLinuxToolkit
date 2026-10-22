@@ -95,7 +95,7 @@ pub trait HostIdentitySource: private::Sealed {
     fn simulation_label(&self) -> &str;
 }
 
-mod private {
+pub(crate) mod private {
     pub trait Sealed {}
 }
 

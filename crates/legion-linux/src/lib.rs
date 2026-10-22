@@ -28,10 +28,16 @@ use std::{
 
 mod host_identity;
 
+#[cfg(any(test, feature = "experimental-dmi-identity-read"))]
+mod dmi_identity;
+
 pub use host_identity::{
     HostIdentityField, HostIdentitySource, HostIdentitySourceError, LinuxHostIdentityError,
     LinuxHostIdentityProvider, SimulatedLinuxHostIdentitySource,
 };
+
+#[cfg(any(test, feature = "experimental-dmi-identity-read"))]
+pub use dmi_identity::{DmiIdentityError, DmiIdentityField};
 
 #[cfg(any(test, feature = "approved-real-platform-profile-read"))]
 use std::fs::File;
