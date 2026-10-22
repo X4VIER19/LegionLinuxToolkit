@@ -12,7 +12,10 @@
 #include <linux/types.h>
 
 #define LEGION_FAN_READ_CONTRACT_VERSION 1
+#define LEGION_FAN_READ_HEADER_BYTES 12
 #define LEGION_FAN_READ_FAT2_BYTES 88
+#define LEGION_FAN_READ_RESPONSE_BYTES \
+	(LEGION_FAN_READ_HEADER_BYTES + LEGION_FAN_READ_FAT2_BYTES)
 
 enum legion_fan_read_status {
 	LEGION_FAN_READ_OK = 0,
@@ -33,5 +36,8 @@ struct legion_fan_read_response_v1 {
 	__u32 payload_size;
 	__u8 payload[LEGION_FAN_READ_FAT2_BYTES];
 } __packed;
+
+static_assert(sizeof(struct legion_fan_read_response_v1) ==
+	      LEGION_FAN_READ_RESPONSE_BYTES);
 
 #endif /* _LEGION_FAN_READ_CONTRACT_H */

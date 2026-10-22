@@ -16,6 +16,7 @@ use std::{collections::BTreeSet, fmt};
 mod fan_get_table;
 mod fan_get_table_abi;
 mod kernel_contract;
+mod kernel_endpoint;
 mod wmi_adapter;
 mod wmi_schema;
 
@@ -32,6 +33,10 @@ pub use kernel_contract::{
     FAN_KERNEL_READ_CONTRACT_HEADER_SIZE_BYTES, FAN_KERNEL_READ_CONTRACT_VERSION,
     KernelFanReadContractError, KernelFanReadStatus, SimulatedKernelFanReadResponse,
     SimulatedKernelFanReadResult, consume_simulated_kernel_fan_read,
+};
+pub use kernel_endpoint::{
+    FAN_KERNEL_ENDPOINT_RESPONSE_SIZE_BYTES, KernelFanEndpointError,
+    consume_simulated_kernel_endpoint_bytes,
 };
 pub use wmi_adapter::{
     FanTableWmiAdapter, FanTableWmiError, FanTableWmiEvidenceError, SimulatedFanTableWmiResult,

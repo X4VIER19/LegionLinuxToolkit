@@ -32,6 +32,13 @@ otra API ejecutable. Si una fase futura autorizase una interfaz concreta, esta
 deberá conservar el versionado, el límite exacto y la separación de errores,
 sin añadir operaciones de escritura.
 
+La Fase 6Q describe un `miscdevice` binario como mecanismo candidato: tendría
+una única operación `read` y entregaría exactamente una estructura de 100 bytes
+(`12` de cabecera y `88` de carga) por consulta. Por ahora solo existe su
+metadato privado y la operación devuelve `-EOPNOTSUPP`; no se llama a
+`misc_register()`, así que no se publica un nodo de dispositivo. Las respuestas
+sintéticas solo existen en fixtures Rust y se etiquetan como simulación.
+
 ## Compilación aislada validada
 
 La compilación se validó una vez, en una copia temporal del directorio, contra

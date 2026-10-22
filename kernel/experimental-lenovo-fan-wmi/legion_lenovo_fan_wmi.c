@@ -12,6 +12,8 @@
 
 #include <linux/acpi.h>
 #include <linux/errno.h>
+#include <linux/fs.h>
+#include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/wmi.h>
@@ -69,6 +71,37 @@ legion_fan_wmi_read_once_disabled(struct wmi_device *wdev,
 
 	return -EOPNOTSUPP;
 }
+
+/*
+ * Proposed binary endpoint, intentionally unpublished. No misc_register()
+ * call exists in this skeleton, so no device node can be created. If a future
+ * phase registers it, reads still fail closed until its separately reviewed
+ * WMI acquisition path is implemented.
+ */
+static ssize_t legion_fan_endpoint_read_disabled(struct file *file,
+					 char __user *buffer, size_t count,
+					 loff_t *offset)
+{
+	(void)file;
+	(void)buffer;
+	(void)count;
+	(void)offset;
+
+	return -EOPNOTSUPP;
+}
+
+static const struct file_operations legion_fan_endpoint_fops = {
+	.owner = THIS_MODULE,
+	.read = legion_fan_endpoint_read_disabled,
+	.llseek = noop_llseek,
+};
+
+/* Metadata only: it is never passed to misc_register(). */
+static struct miscdevice legion_fan_endpoint __maybe_unused = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "legion-fan-read-experimental",
+	.fops = &legion_fan_endpoint_fops,
+};
 
 MODULE_DESCRIPTION("Disabled LegionLinuxToolkit Lenovo fan WMI reader skeleton");
 MODULE_LICENSE("GPL");
