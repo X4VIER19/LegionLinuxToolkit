@@ -14,10 +14,14 @@ use serde::Serialize;
 use std::{collections::BTreeSet, fmt};
 
 mod fan_get_table;
+mod wmi_adapter;
 
 pub use fan_get_table::{
     FanGetTableEvidence, FanGetTableEvidenceParser, FanGetTableParseError, FanTableEvidence,
     OpaqueFanTableField, ParsedFanGetTable, documented_windows_table_evidence,
+};
+pub use wmi_adapter::{
+    FanTableWmiAdapter, FanTableWmiError, FanTableWmiEvidenceError, SimulatedFanTableWmiResult,
 };
 
 pub const DOCUMENTED_FAN_ID: u8 = 1;
