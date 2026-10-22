@@ -2,10 +2,10 @@
 /*
  * Deliberately disabled Lenovo Legion fan WMI skeleton.
  *
- * This file is not registered as a wmi_driver and has no probe, remove,
- * shutdown, or firmware-evaluation path. Its init and exit functions manage
- * only the experimental read-only miscdevice. Its disabled WMI helper always
- * returns -EOPNOTSUPP before any WMI method could be evaluated.
+ * This file is not registered as a wmi_driver. Its inert probe and remove
+ * callbacks exist only to validate the kernel API shape and never evaluate
+ * firmware. Its init and exit functions manage only the experimental
+ * read-only miscdevice.
  *
  * It records evidence specific to Lenovo Legion Slim 5 16ARP9 (83EX), BIOS
  * NUCN15WW. It is not evidence of compatibility with another model or BIOS.
@@ -51,9 +51,42 @@ static_assert(sizeof(struct legion_fan_get_table_fat2) ==
 	      LENOVO_FAN_GET_TABLE_FAT2_BYTES);
 
 /*
- * Metadata only. Deliberately do not emit a WMI modalias: this module must not
- * be automatically loaded in response to the Lenovo GUID.
+ * Binding metadata for a future reviewed activation. Do not add
+ * MODULE_DEVICE_TABLE(): the experimental module must not acquire a WMI
+ * modalias or automatic loading path.
  */
+static const struct wmi_device_id legion_fan_wmi_id_table[] = {
+	{ .guid_string = LENOVO_FAN_WMI_GUID },
+	{}
+};
+
+/* A registered driver would still fail closed until a later approved phase. */
+static int legion_fan_wmi_probe_disabled(struct wmi_device *wdev,
+					 const void *context)
+{
+	(void)wdev;
+	(void)context;
+
+	return -EOPNOTSUPP;
+}
+
+static void legion_fan_wmi_remove_disabled(struct wmi_device *wdev)
+{
+	(void)wdev;
+}
+
+/*
+ * The definition is intentionally unused. There is no wmi_driver_register()
+ * or module_wmi_driver() call in this phase, so no binding can occur.
+ */
+static struct wmi_driver legion_fan_wmi_driver __maybe_unused = {
+	.driver = {
+		.name = "legion-fan-wmi-experimental",
+	},
+	.id_table = legion_fan_wmi_id_table,
+	.probe = legion_fan_wmi_probe_disabled,
+	.remove = legion_fan_wmi_remove_disabled,
+};
 
 /*
  * Deliberately unavailable. A future reviewed implementation must add its own

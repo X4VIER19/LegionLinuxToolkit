@@ -9,10 +9,11 @@ fase.
 
 ## Estado de seguridad
 
-El archivo C **no registra** un `wmi_driver`, no emite un alias WMI para carga
-automática y no declara `probe`, eliminación ni apagado de WMI. Sus funciones
-de inicialización y salida gestionan exclusivamente el ciclo de vida del
-`miscdevice` experimental. La única función de lectura devuelve
+El archivo C define, pero **no registra**, un `wmi_driver` para el GUID Lenovo.
+No emite un alias WMI para carga automática. Los callbacks `probe` y `remove`
+son inertes: el primero devuelve `-EOPNOTSUPP` y ninguno evalúa firmware. Sus
+funciones de inicialización y salida gestionan exclusivamente el ciclo de vida
+del `miscdevice` experimental. La única función de lectura devuelve
 `-EOPNOTSUPP` antes de poder invocar una API WMI. Por tanto, este módulo no
 evalúa métodos ACPI/WMI, ni al cargarse ni por ningún otro camino ejecutable.
 
@@ -40,6 +41,16 @@ nodo se registraría y cada lectura devolvería exclusivamente `-EOPNOTSUPP`.
 No entrega datos FAT2, no controla ventiladores y no accede a WMI. Las
 respuestas sintéticas solo existen en fixtures Rust y se etiquetan como
 simulación. Este repositorio no instala el módulo ni habilita carga automática.
+
+## Vinculación WMI preparada y desactivada
+
+La estructura privada `wmi_driver` identifica el GUID
+`92549549-4BDE-4F06-AC04-CE8BF898DBAA`, pero no existe una llamada a
+`wmi_driver_register()` ni se emplea `module_wmi_driver()`. Por ello, no puede
+vincularse a un dispositivo WMI durante esta fase. Una activación posterior
+requerirá una modificación explícita y auditable del ciclo de vida, revisión
+del orden de registro y limpieza, pruebas aisladas y una autorización
+independiente. Esa activación no autorizaría por sí sola `Fan_Get_Table`.
 
 ## Compilación aislada validada
 
