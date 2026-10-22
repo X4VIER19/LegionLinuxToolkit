@@ -1,9 +1,9 @@
 //! Hardware-isolated fan domain and transport models.
 //!
 //! This crate deliberately implements only static simulation. It does not open
-//! Linux paths, invoke WMI/ACPI/EC, decode an undocumented firmware buffer, or
-//! expose a write operation. The observed Windows request shape is represented
-//! as data, not as an executable firmware protocol.
+//! Linux paths, invoke WMI/ACPI/EC, or expose a write operation. The static
+//! AML-confirmed `Fan_Get_Table` buffer can be decoded in memory only; no
+//! executable firmware protocol is exposed.
 
 use legion_core::{
     FanInterpretation, FanTelemetry, FanValidation, TelemetryArtifact, TelemetryProvenance,
@@ -14,12 +14,18 @@ use serde::Serialize;
 use std::{collections::BTreeSet, fmt};
 
 mod fan_get_table;
+mod fan_get_table_abi;
 mod wmi_adapter;
 mod wmi_schema;
 
 pub use fan_get_table::{
     FanGetTableEvidence, FanGetTableEvidenceParser, FanGetTableParseError, FanTableEvidence,
     OpaqueFanTableField, ParsedFanGetTable, documented_windows_table_evidence,
+};
+pub use fan_get_table_abi::{
+    DecodedFanGetTableResponse, FAN_GET_TABLE_INPUT_SIZE_BYTES, FAN_GET_TABLE_RESPONSE_SIZE_BYTES,
+    FAN_GET_TABLE_TABLE_ENTRY_COUNT, FanGetTableAbiError,
+    decode_confirmed_83ex_fan_get_table_response, encode_confirmed_83ex_fan_get_table_request,
 };
 pub use wmi_adapter::{
     FanTableWmiAdapter, FanTableWmiError, FanTableWmiEvidenceError, SimulatedFanTableWmiResult,

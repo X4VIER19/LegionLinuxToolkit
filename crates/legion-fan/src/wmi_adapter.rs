@@ -1,12 +1,14 @@
 //! Static bridge from the generic WMI transport contract to fan-table evidence.
 //!
 //! This module is not a Linux WMI implementation. Its transport is injected,
-//! and the opaque response is preserved without decoding its bytes.
+//! and the raw response is preserved alongside its strictly bounded,
+//! static-AML-backed decoding.
 
 use crate::{
-    ConfirmedFanGetTableSchema, FanGetTableEvidence, FanGetTableEvidenceParser,
-    FanGetTableParseError, FanTableProvenance, FanTableQuery, ParsedFanGetTable,
-    confirmed_83ex_fan_get_table_schema,
+    ConfirmedFanGetTableSchema, DecodedFanGetTableResponse, FanGetTableAbiError,
+    FanGetTableEvidence, FanGetTableEvidenceParser, FanGetTableParseError, FanTableProvenance,
+    FanTableQuery, ParsedFanGetTable, confirmed_83ex_fan_get_table_schema,
+    decode_confirmed_83ex_fan_get_table_response,
 };
 use legion_core::{
     TelemetryArtifact, WmiAccess, WmiArgument, WmiArtifact, WmiKnowledge, WmiMethodMetadata,
@@ -22,6 +24,9 @@ pub struct SimulatedFanTableWmiResult {
     /// Linux/ACPI byte encoding used by a future transport.
     pub schema: ConfirmedFanGetTableSchema,
     pub response: WmiResponse,
+    /// Lossless decoding of the statically confirmed `FAT2` layout. Array
+    /// element semantics remain unspecified.
+    pub decoded: DecodedFanGetTableResponse,
     pub parsed: ParsedFanGetTable,
 }
 
@@ -59,6 +64,8 @@ impl<T: WmiTransport> FanTableWmiAdapter<T> {
                 FanTableWmiEvidenceError::NonSimulatedResponse,
             ));
         }
+        let decoded = decode_confirmed_83ex_fan_get_table_response(&response.bytes)
+            .map_err(FanTableWmiError::Abi)?;
 
         evidence.raw_response = Some(response.bytes.clone());
         evidence.provenance = fan_provenance(&response.provenance);
@@ -67,6 +74,7 @@ impl<T: WmiTransport> FanTableWmiAdapter<T> {
         Ok(SimulatedFanTableWmiResult {
             schema: confirmed_83ex_fan_get_table_schema(),
             response,
+            decoded,
             parsed,
         })
     }
@@ -117,9 +125,9 @@ fn wmi_request(query: FanTableQuery) -> WmiRequest {
         ],
         method: WmiMethodMetadata {
             observed_name: Some("Fan_Get_Table".to_owned()),
-            method_identifier: None,
-            request_abi: WmiKnowledge::Unknown,
-            response_abi: WmiKnowledge::Unknown,
+            method_identifier: Some("5".to_owned()),
+            request_abi: WmiKnowledge::Observed,
+            response_abi: WmiKnowledge::Observed,
         },
         provenance: WmiProvenance {
             artifact: WmiArtifact::StaticSimulation,
@@ -152,6 +160,7 @@ pub enum FanTableWmiEvidenceError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FanTableWmiError {
     Transport(WmiTransportError),
+    Abi(FanGetTableAbiError),
     Evidence(FanTableWmiEvidenceError),
     Interpretation(FanGetTableParseError),
 }
@@ -180,6 +189,7 @@ impl fmt::Display for FanTableWmiError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Transport(error) => write!(f, "fan-table transport error: {error}"),
+            Self::Abi(error) => write!(f, "fan-table ABI error: {error}"),
             Self::Evidence(error) => write!(f, "fan-table evidence error: {error}"),
             Self::Interpretation(error) => write!(f, "fan-table interpretation error: {error}"),
         }
@@ -202,9 +212,9 @@ mod tests {
         fn execute(&self, request: &WmiRequest) -> Result<WmiResponse, WmiTransportError> {
             assert!(matches!(request.operation, WmiOperation::FanGetTable));
             assert_eq!(request.access, WmiAccess::ReadOnly);
-            assert_eq!(request.method.method_identifier, None);
-            assert_eq!(request.method.request_abi, WmiKnowledge::Unknown);
-            assert_eq!(request.method.response_abi, WmiKnowledge::Unknown);
+            assert_eq!(request.method.method_identifier.as_deref(), Some("5"));
+            assert_eq!(request.method.request_abi, WmiKnowledge::Observed);
+            assert_eq!(request.method.response_abi, WmiKnowledge::Observed);
             self.0.clone()
         }
     }
@@ -223,9 +233,22 @@ mod tests {
         }
     }
 
+    fn aml_response() -> Vec<u8> {
+        let mut bytes = vec![0; 88];
+        bytes[0..4].copy_from_slice(&10_u32.to_le_bytes());
+        bytes[44..48].copy_from_slice(&10_u32.to_le_bytes());
+        for index in 0..10 {
+            let offset = 4 + (index * 4);
+            bytes[offset..offset + 4].copy_from_slice(&((index + 1) as u32).to_le_bytes());
+            let offset = 48 + (index * 4);
+            bytes[offset..offset + 4].copy_from_slice(&((index + 1) as u32).to_le_bytes());
+        }
+        bytes
+    }
+
     #[test]
-    fn success_preserves_opaque_response_and_keeps_unknown_format_opaque() {
-        let response = response(vec![0xff, 0x00, 0xa5], 3);
+    fn success_preserves_the_raw_response_and_decodes_only_the_confirmed_shape() {
+        let response = response(aml_response(), 88);
         let adapter = FanTableWmiAdapter::new(InjectedTransport(Ok(response.clone())));
         let result = adapter
             .query(
@@ -234,10 +257,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(result.response, response);
-        assert_eq!(
-            result.parsed.original.raw_response,
-            Some(vec![0xff, 0x00, 0xa5])
-        );
+        assert_eq!(result.parsed.original.raw_response, Some(aml_response()));
         assert!(
             result
                 .parsed
@@ -250,7 +270,8 @@ mod tests {
             WmiKnowledge::Unknown
         );
         assert_eq!(result.schema.wmi_method_id, 5);
-        assert_eq!(result.schema.linux_acpi_abi.response_size_bytes, None);
+        assert_eq!(result.schema.linux_acpi_abi.response_size_bytes, Some(88));
+        assert_eq!(result.decoded.fan_table, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     }
 
     #[test]
@@ -263,6 +284,26 @@ mod tests {
             ),
             Err(FanTableWmiError::Transport(
                 WmiTransportError::InconsistentBufferSize { .. }
+            ))
+        ));
+    }
+
+    #[test]
+    fn an_aml_shape_error_is_distinct_from_transport_and_interpretation() {
+        let mut invalid = aml_response();
+        invalid[44..48].copy_from_slice(&9_u32.to_le_bytes());
+        let adapter = FanTableWmiAdapter::new(InjectedTransport(Ok(response(invalid, 88))));
+        assert!(matches!(
+            adapter.query(
+                FanTableQuery::documented_windows_observation(),
+                documented_windows_table_evidence()
+            ),
+            Err(FanTableWmiError::Abi(
+                FanGetTableAbiError::UnexpectedDeclaredSize {
+                    field: "SensorTableSize",
+                    actual: 9,
+                    expected: 10,
+                }
             ))
         ));
     }
@@ -300,6 +341,7 @@ mod tests {
 
         let mut malformed = documented_windows_table_evidence();
         malformed.tables[0].target_rpm = Some(vec![500; 10]);
+        let adapter = FanTableWmiAdapter::new(InjectedTransport(Ok(response(aml_response(), 88))));
         assert!(matches!(
             adapter.query(FanTableQuery::documented_windows_observation(), malformed),
             Err(FanTableWmiError::Interpretation(

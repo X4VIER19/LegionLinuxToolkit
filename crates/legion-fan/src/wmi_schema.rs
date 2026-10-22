@@ -1,8 +1,9 @@
 //! Model of the `LENOVO_FAN_METHOD` schema confirmed in Windows for the 83EX.
 //!
 //! This module records class metadata, not an executable Linux protocol. In
-//! particular, the ACPI buffer representation, response byte layout, and a
-//! safe Linux invocation remain unknown.
+//! The target's static AML confirms the shape of the input and output buffers.
+//! A safe Linux invocation remains unavailable: this module does not locate a
+//! WMI device or invoke firmware.
 
 use legion_core::WmiKnowledge;
 use serde::Serialize;
@@ -107,9 +108,9 @@ pub const fn confirmed_83ex_fan_get_table_schema() -> ConfirmedFanGetTableSchema
             },
         ],
         linux_acpi_abi: LinuxAcpiAbiBoundary {
-            request_encoding: WmiKnowledge::Unknown,
-            response_encoding: WmiKnowledge::Unknown,
-            response_size_bytes: None,
+            request_encoding: WmiKnowledge::Observed,
+            response_encoding: WmiKnowledge::Observed,
+            response_size_bytes: Some(88),
         },
     }
 }
@@ -153,7 +154,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn target_schema_confirms_cim_types_without_claiming_a_linux_abi() {
+    fn target_schema_confirms_cim_types_and_static_aml_abi() {
         let schema = confirmed_83ex_fan_get_table_schema();
         assert_eq!(schema.guid, LENOVO_FAN_METHOD_GUID);
         assert_eq!(schema.wmi_method_id, 5);
@@ -172,9 +173,13 @@ mod tests {
         assert_eq!(schema.outputs[3].id, 5);
         assert_eq!(
             schema.linux_acpi_abi.request_encoding,
-            WmiKnowledge::Unknown
+            WmiKnowledge::Observed
         );
-        assert_eq!(schema.linux_acpi_abi.response_size_bytes, None);
+        assert_eq!(
+            schema.linux_acpi_abi.response_encoding,
+            WmiKnowledge::Observed
+        );
+        assert_eq!(schema.linux_acpi_abi.response_size_bytes, Some(88));
     }
 
     #[test]
