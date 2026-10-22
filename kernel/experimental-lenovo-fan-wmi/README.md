@@ -11,10 +11,11 @@ fase.
 
 El archivo C registra un `wmi_driver` para el GUID Lenovo únicamente durante
 la inicialización explícita del módulo. No emite un alias WMI para carga
-automática. Los callbacks `probe` y `remove` son inertes: el primero devuelve
-`-EOPNOTSUPP` y ninguno evalúa firmware. Si el registro WMI falla, se revierte
-el registro previo del `miscdevice`; en salida se retira primero el driver WMI
-y después el dispositivo. La única función de lectura devuelve
+automática. Los callbacks `probe` y `remove` son pasivos: el núcleo solo llama
+al primero después de la coincidencia exacta del GUID en `id_table`; acepta esa
+vinculación sin evaluar firmware. Si el registro WMI falla, se revierte el
+registro previo del `miscdevice`; en salida se retira primero el driver WMI y
+después el dispositivo. La única función de lectura devuelve
 `-EOPNOTSUPP` antes de poder invocar una API WMI. Por tanto, este módulo no
 evalúa métodos ACPI/WMI, ni al cargarse ni por ningún otro camino ejecutable.
 
@@ -50,8 +51,8 @@ La estructura privada `wmi_driver` identifica el GUID
 del módulo. No se emplea `module_wmi_driver()` ni se publica un alias WMI; el
 módulo solo puede llegar a ello mediante una carga manual autorizada. Si el GUID
 ya está gestionado por otro controlador, este módulo no desplaza ni desvincula
-al existente. Incluso si se produjera una vinculación, `probe` falla cerrado y
-no autoriza `Fan_Get_Table`.
+al existente. Una vinculación solo confirma el GUID; no valida el modelo, BIOS
+ni ABI y no autoriza `Fan_Get_Table`.
 
 ## Compilación aislada validada
 

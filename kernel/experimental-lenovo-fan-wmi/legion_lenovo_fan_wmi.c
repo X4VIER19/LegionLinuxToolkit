@@ -60,17 +60,19 @@ static const struct wmi_device_id legion_fan_wmi_id_table[] = {
 	{}
 };
 
-/* A registered driver still fails closed without firmware access. */
-static int legion_fan_wmi_probe_disabled(struct wmi_device *wdev,
-					 const void *context)
+/*
+ * The WMI core calls this only after the exact GUID in id_table matches. This
+ * establishes passive ownership of that device; it does not query firmware.
+ */
+static int legion_fan_wmi_probe(struct wmi_device *wdev, const void *context)
 {
 	(void)wdev;
 	(void)context;
 
-	return -EOPNOTSUPP;
+	return 0;
 }
 
-static void legion_fan_wmi_remove_disabled(struct wmi_device *wdev)
+static void legion_fan_wmi_remove(struct wmi_device *wdev)
 {
 	(void)wdev;
 }
@@ -80,8 +82,8 @@ static struct wmi_driver legion_fan_wmi_driver = {
 		.name = "legion-fan-wmi-experimental",
 	},
 	.id_table = legion_fan_wmi_id_table,
-	.probe = legion_fan_wmi_probe_disabled,
-	.remove = legion_fan_wmi_remove_disabled,
+	.probe = legion_fan_wmi_probe,
+	.remove = legion_fan_wmi_remove,
 };
 
 /*
