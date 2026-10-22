@@ -8,10 +8,12 @@ de `legion-linux` para consultar exclusivamente dos atributos Linux:
 - `/sys/firmware/acpi/platform_profile`;
 - `/sys/firmware/acpi/platform_profile_choices`.
 
-No se implementa un proveedor de producción, no se elimina `#[cfg(test)]`, no
-se abre ninguna ruta del host y no se invoca firmware. El diseño tampoco
-autoriza a la CLI ni a otra capa a leer sysfs. Toda activación futura requerirá
-una fase, revisión de código y autorización independientes.
+La Fase 5B.5B-2 incorpora una implementación de forma compilable, pero no
+activable: el proveedor concreto es privado y su constructor exige una
+capacidad privada que el crate no crea. Por tanto, esta fase no abre ninguna
+ruta del host, no invoca firmware y no autoriza a la CLI ni a otra capa a leer
+sysfs. Toda activación futura requerirá una fase, revisión de código y
+autorización independientes que añada deliberadamente esa capacidad.
 
 Las observaciones manuales anteriores del 83EX con BIOS `NUCN15WW` indican que
 esas rutas devolvieron respectivamente `performance` y `low-power balanced
@@ -32,12 +34,17 @@ pasividad o sus valores permanezcan iguales.
 
 ## Revisión estática del proveedor aislado actual
 
-El código de Fase 5B.5A en `crates/legion-linux/src/lib.rs` compila el tipo
-`Openat2TestPlatformProfileSource` exclusivamente con `#[cfg(test)]`. Recibe
-un descriptor de directorio ya abierto y solicita solo los dos nombres de
-`PlatformProfileEntry`; no acepta ruta, variable de entorno, argumento CLI ni
-proveedor externo. Las partes candidatas a reutilización son conceptuales, no
-una autorización para mover código:
+El código de Fase 5B.5B-2 en `crates/legion-linux/src/lib.rs` mantiene
+`ConfinedOpenat2PlatformProfileSource` privado. Las pruebas le entregan solo
+un descriptor de directorio temporal ya abierto; la variante de producción
+solo puede recibir el descriptor de `/sys/firmware/acpi` desde
+`SysfsPlatformProfileProvider`, cuyo constructor está bloqueado por
+`ApprovedRealReadActivation`, un tipo privado sin variantes ni valor
+construible. Además, `LinuxPlatformProfileOrigin` es no exhaustivo, de modo que
+un consumidor externo tampoco puede fabricar la variante `LinuxReadOnly`.
+Ninguno acepta ruta, variable de entorno,
+argumento CLI ni proveedor externo. La implementación compilada no equivale a
+una autorización para abrir sysfs:
 
 | Parte actual | Valor para producción | Cambio o comprobación necesaria |
 | --- | --- | --- |
@@ -45,7 +52,7 @@ una autorización para mover código:
 | Límite interno de 4096 bytes y lectura de un byte adicional. | Reutilizable como política defensiva. | Validar que el atributo virtual permita EOF y que 4096 siga siendo razonable. |
 | Conversión de `ENOENT`, permisos, `ENOSYS`, `ELOOP`, `EXDEV` y `EAGAIN` en errores. | Reutilizable como separación de errores de origen. | Conservar `errno` diagnóstico de forma estructurada y no degradar a datos. |
 | Bucle de lectura: continuar ante lectura corta, completar solo en EOF. | Reutilizable como algoritmo. | Tratar `EAGAIN`, `EINTR` y errores después de bytes sin aceptar el búfer parcial. |
-| `fstat` y exigencia de archivo regular. | Útil para fixtures convencionales. | No trasladar esa exigencia a sysfs sin evidencia: un atributo virtual puede no ofrecer la misma semántica que un archivo convencional. |
+| `fstat` y exigencia de archivo regular. | Defensa adoptada por el proveedor bloqueado. | La activación real exige comprobar previamente que ambos atributos sysfs satisfacen esa expectativa; si no, debe permanecer desactivado. |
 | `StaticSimulation` y etiqueta de raíz de pruebas. | Debe quedarse en fixtures. | Un proveedor de producción no podrá reutilizar su constructor ni construir la procedencia real antes del éxito total. |
 
 El proveedor aislado protege contra sustitución de la raíz mediante el
@@ -76,9 +83,32 @@ PlatformProfileAdapter (validación de contenido)
 origen LinuxReadOnly, solo tras éxito completo
 ```
 
-`legion-core` conservará modelos y validación, sin rutas, descriptores ni
-dependencia de Linux. La CLI continuará usando fixtures hasta una autorización
-que cubra específicamente una integración y ejecución reales.
+`legion-core` conserva modelos y validación, sin rutas, descriptores ni
+dependencia de Linux. La CLI continúa usando fixtures. Aunque
+`SysfsPlatformProfileProvider` se compila en `legion-linux`, no hay una
+capacidad construible, exportación, argumento ni variable de entorno que pueda
+instanciarlo o ejecutar su secuencia.
+
+### Barrera de activación auditable
+
+`ApprovedRealReadActivation` es un `enum` privado sin variantes. No hay en el
+crate una función, feature, variable de entorno ni constructor que pueda crear
+un valor de ese tipo; sin código `unsafe`, no puede existir un argumento para
+`SysfsPlatformProfileProvider::new`. Por ello, compilar la implementación no
+la activa.
+
+Una fase futura tendría que modificar explícitamente ese tipo o añadir una
+función interna que produzca el valor de activación. Ese cambio debe quedar en
+un diff revisable junto con: la autorización para las dos rutas, una prueba de
+que sigue sin haber entrada de ruta o CLI, la política de procedencia y las
+pruebas aisladas actualizadas. No se permite introducir un feature oculto,
+fallback, variable de entorno o constructor público como sustituto de esa
+revisión.
+
+El proveedor conserva internamente un candidato a origen `LinuxReadOnly`, pero
+solo publica `LinuxPlatformProfileReading` después de completar las tres
+lecturas, comprobar su coherencia y superar `PlatformProfileAdapter`. Si falla
+cualquier paso, devuelve un error sin publicar una lectura ni procedencia real.
 
 ### Apertura directa frente a árbol anclado
 
@@ -109,10 +139,10 @@ banderas de confinamiento.
 | `O_RDONLY` | Obligatorio en directorios y atributos. | Solicita apertura de solo lectura. | No demuestra que la lectura sea libre de efectos del controlador. |
 | `O_CLOEXEC` | Obligatorio. | Evita la carrera de marcar el descriptor close-on-exec después de abrir. | Ninguna. |
 | `O_NOFOLLOW` | Defensa complementaria en cada apertura. | Rechaza un enlace solo en el componente final. | No sustituye las banderas `RESOLVE_*`. |
-| `O_NONBLOCK` | No asumirlo todavía para producción. | Para archivos regulares no cambia el bloqueo; para otros objetos puede provocar `EAGAIN` si la operación bloquearía. | Decidir tras analizar la semántica del atributo sysfs concreto; si se adopta, `EAGAIN` será error de origen, no dato parcial. |
+| `O_NONBLOCK` | Incluido en la implementación bloqueada para tratar `EAGAIN` como error de origen. | Para archivos regulares no cambia el bloqueo; para otros objetos puede provocar `EAGAIN` si la operación bloquearía. | La autorización de activación debe aceptar explícitamente esta política para estos atributos sysfs. |
 | `RESOLVE_BENEATH` | Obligatorio en aperturas relativas al `dirfd` anclado. | Impide que la resolución salga de ese `dirfd`; puede indicar carrera o escape con `EAGAIN`/`EXDEV`. | No aplica a la primera ruta absoluta. |
 | `RESOLVE_NO_MAGICLINKS` | Obligatorio. | Prohíbe magic-links durante la resolución. | Ninguna conocida para estos atributos, pero debe probarse con fixtures. |
-| `RESOLVE_NO_SYMLINKS` | Mantener como política preferida de máxima restricción, no activar aún. | Prohíbe enlaces en todos los componentes y también implica `NO_MAGICLINKS`. | Confirmar si `/sys/firmware/acpi` y los atributos requeridos no dependen de enlaces legítimos. |
+| `RESOLVE_NO_SYMLINKS` | Aplicado en la implementación bloqueada como política de máxima restricción. | Prohíbe enlaces en todos los componentes y también implica `NO_MAGICLINKS`. | Confirmar si `/sys/firmware/acpi` y los atributos requeridos no dependen de enlaces legítimos antes de habilitarla. |
 
 La documentación de `openat2` advierte que `RESOLVE_NO_SYMLINKS` puede causar
 errores en sistemas que antes funcionaban cuando se modifican componentes de la
@@ -205,7 +235,7 @@ la implementación:
    política interna de activación aprobada y que no reciba rutas.
 4. Reemplazar el origen de tipo genérico por una fuente interna enumerada, o
    por constructores separados que produzcan un tipo de resultado cerrado.
-5. Renombrar `LinuxReadOnlyReserved` a `LinuxReadOnly` solo en esa fase y
+5. `LinuxReadOnly` ya existe, pero solo el proveedor privado puede producirlo;
    construir `TelemetryArtifact::LinuxReadOnly` después del éxito completo.
 6. Añadir una prueba negativa que demuestre que los fixtures, una etiqueta de
    raíz y datos arbitrarios no pueden construir ni serializarse como origen
@@ -269,11 +299,11 @@ semántica de EOF de las dos rutas en el 83EX. También falta demostrar que sus
 lecturas no activan comportamiento con efectos en el controlador y validar el
 mecanismo de autorización que construiría el proveedor real.
 
-Por ello, no se debe mover el proveedor fuera de `#[cfg(test)]` todavía. La
-próxima fase razonable es una revisión de la futura interfaz privada y de las
-pruebas aisladas adicionales; cualquier consulta real deberá ser una etapa
-distinta con autorización expresa, sin fallback y con un protocolo de
-observación revisado.
+Por ello, no se debe crear la capacidad de activación ni llamar al constructor
+privado todavía. La próxima fase razonable es una revisión de esta interfaz
+bloqueada y de las pruebas aisladas adicionales; cualquier consulta real deberá
+ser una etapa distinta con autorización expresa, sin fallback y con un
+protocolo de observación revisado.
 
 ## Fuentes públicas
 

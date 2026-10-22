@@ -126,11 +126,12 @@ La separación propuesta es:
 | Validación de soporte | Modelo/BIOS/kernel no coinciden o no hay evidencia suficiente. | Estado `Unvalidated` o rechazo por registro de compatibilidad; nunca una lectura se convierte por sí sola en control habilitado. |
 
 El proveedor real no debe aceptar una procedencia proporcionada por el
-llamador. Al aprobarse, `legion-linux` construirá internamente
-`LinuxPlatformProfileOrigin::LinuxReadOnly` (renombrando el marcador actual
-`LinuxReadOnlyReserved`) y `TelemetryArtifact::LinuxReadOnly`; el proveedor
-virtual seguirá produciendo exclusivamente `StaticSimulation`. Una prueba debe
-demostrar que ningún constructor de fixture puede obtener la etiqueta real.
+llamador. La Fase 5B.5B-2 reserva internamente
+`LinuxPlatformProfileOrigin::LinuxReadOnly` y
+`TelemetryArtifact::LinuxReadOnly` tras una capacidad privada inhabitable; el
+proveedor virtual sigue produciendo exclusivamente `StaticSimulation`. Una
+prueba debe demostrar que ningún constructor de fixture puede obtener la
+etiqueta real.
 
 ## Evolución propuesta de la interfaz sellada
 

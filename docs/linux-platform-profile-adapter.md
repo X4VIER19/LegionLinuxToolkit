@@ -62,12 +62,13 @@ o incoherente llega al parser de `legion-core` y conserva sus errores específic
 
 ## Procedencia
 
-Las fuentes disponibles ahora solo pueden originar
+Las fuentes públicas disponibles solo pueden originar
 `LinuxPlatformProfileOrigin::StaticSimulation`; la procedencia interna es
-`TelemetryArtifact::StaticSimulation`. Existe una etiqueta reservada
-`LinuxReadOnlyReserved` junto con `TelemetryArtifact::LinuxReadOnly` para que
-una futura fuente real pueda distinguirse de una fixture. Ningún constructor de
-esta fase puede generar esa etiqueta reservada.
+`TelemetryArtifact::StaticSimulation`. La etiqueta `LinuxReadOnly` junto con
+`TelemetryArtifact::LinuxReadOnly` está reservada para el proveedor privado
+bloqueado de Fase 5B.5B-2. Su capacidad de activación es inhabitable, así que
+ni fixtures ni consumidores externos pueden generar esa etiqueta o ejecutar
+una lectura real.
 
 Por tanto, los resultados de las observaciones manuales del 83EX —`performance`
 y `low-power balanced performance max-power custom`— se usan únicamente como

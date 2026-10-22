@@ -1,25 +1,26 @@
-//! Linux-facing platform-profile architecture with no host filesystem access.
+//! Linux-facing platform-profile architecture with no public host filesystem
+//! access.
 //!
 //! This crate deliberately accepts bytes from an injected source. Phase 5B.3
-//! includes the virtual, in-memory source below. Phase 5B.5A additionally has
-//! a test-only `openat2` source which accepts only a directory descriptor made
-//! by its tests. The production library has no filesystem reader, configurable
-//! path, host root, fallback to `/sys`, or write API.
+//! includes the virtual, in-memory source below. It also contains a private,
+//! production-shaped `openat2` provider behind an unconstructable activation
+//! capability. There is no public filesystem reader, configurable path, host
+//! root, fallback to `/sys`, write API, or CLI integration. Consequently this
+//! build cannot initiate a host read; tests use only temporary fixture trees.
 
 use legion_core::{
     ConfidenceLevel, PlatformProfileAdapter, PlatformProfileError, PlatformProfileInput,
     PlatformProfileRawInput, PlatformProfileReading, TelemetryArtifact, TelemetryProvenance,
 };
-use std::{collections::BTreeMap, fmt};
-
-#[cfg(test)]
 use rustix::{
     fs::{CWD, FileType, Mode, OFlags, ResolveFlags, fstat, openat2},
     io::{Errno, read},
 };
+use std::{collections::BTreeMap, fmt, fs::File};
+
 #[cfg(test)]
 use std::{
-    fs::{self, File},
+    fs,
     os::unix::fs::symlink,
     path::{Path, PathBuf},
     process,
@@ -43,13 +44,14 @@ impl PlatformProfileEntry {
     }
 }
 
-/// Acquisition class kept outside the parsed domain object. No provider in
-/// this phase can construct `LinuxReadOnlyReserved`; it is a reserved future
-/// label, represented now so it cannot be confused with a fixture later.
+/// Acquisition class kept outside the parsed domain object. The real label is
+/// constructed only by the private, capability-gated provider after a complete
+/// successful read; public fixtures can only produce `StaticSimulation`.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LinuxPlatformProfileOrigin {
     StaticSimulation { root_label: String },
-    LinuxReadOnlyReserved { interface: &'static str },
+    LinuxReadOnly { interface: &'static str },
 }
 
 /// Parsed data plus its acquisition class. The embedded core provenance is
@@ -92,6 +94,7 @@ pub enum PlatformProfileSourceError {
         entry: PlatformProfileEntry,
         reason: String,
     },
+    ConcurrentChange,
 }
 
 impl fmt::Display for PlatformProfileSourceError {
@@ -135,6 +138,10 @@ impl fmt::Display for PlatformProfileSourceError {
                     entry.relative_name()
                 )
             }
+            Self::ConcurrentChange => write!(
+                f,
+                "platform-profile choices changed during a consistency read"
+            ),
         }
     }
 }
@@ -193,9 +200,10 @@ pub trait PlatformProfileByteSource: private::Sealed {
         maximum_size: usize,
     ) -> Result<PlatformProfileSourceRead, PlatformProfileSourceError>;
 
-    /// Identifies a virtual test root; this is deliberately not a filesystem
-    /// path and the trait cannot declare a real-host origin in this phase.
-    fn simulated_root_label(&self) -> &str;
+    /// The provider chooses its own acquisition class. Callers cannot supply
+    /// an origin or label, which prevents fixture data from being relabeled as
+    /// a real Linux read.
+    fn origin(&self) -> LinuxPlatformProfileOrigin;
 }
 
 mod private {
@@ -224,9 +232,29 @@ where
     pub fn read(&self) -> Result<LinuxPlatformProfileReading, LinuxPlatformProfileError> {
         let active = self.read_text(PlatformProfileEntry::Active)?;
         let choices = self.read_text(PlatformProfileEntry::Choices)?;
-        let origin = LinuxPlatformProfileOrigin::StaticSimulation {
-            root_label: self.source.simulated_root_label().to_owned(),
-        };
+        self.publish(active, choices)
+    }
+
+    /// Reads choices, active profile, then choices again. Equality of the two
+    /// choices values detects some concurrent changes but does not claim an
+    /// atomic sysfs snapshot. It is private so only the production-shaped
+    /// provider can require this stronger sequence.
+    fn read_consistent(&self) -> Result<LinuxPlatformProfileReading, LinuxPlatformProfileError> {
+        let choices_before = self.read_text(PlatformProfileEntry::Choices)?;
+        let active = self.read_text(PlatformProfileEntry::Active)?;
+        let choices_after = self.read_text(PlatformProfileEntry::Choices)?;
+        if choices_before != choices_after {
+            return Err(PlatformProfileSourceError::ConcurrentChange.into());
+        }
+        self.publish(active, choices_before)
+    }
+
+    fn publish(
+        &self,
+        active: String,
+        choices: String,
+    ) -> Result<LinuxPlatformProfileReading, LinuxPlatformProfileError> {
+        let origin = self.source.origin();
         let provenance = provenance_for(&origin);
         let profile = PlatformProfileAdapter.parse(PlatformProfileInput {
             raw: PlatformProfileRawInput {
@@ -267,9 +295,9 @@ fn provenance_for(origin: &LinuxPlatformProfileOrigin) -> TelemetryProvenance {
             source: format!("legion-linux::simulated-root:{root_label}"),
             confidence: ConfidenceLevel::Low,
         },
-        LinuxPlatformProfileOrigin::LinuxReadOnlyReserved { interface } => TelemetryProvenance {
+        LinuxPlatformProfileOrigin::LinuxReadOnly { interface } => TelemetryProvenance {
             artifact: TelemetryArtifact::LinuxReadOnly,
-            source: format!("legion-linux::reserved:{interface}"),
+            source: format!("legion-linux::readonly:{interface}"),
             confidence: ConfidenceLevel::Low,
         },
     }
@@ -282,7 +310,7 @@ fn provenance_matches(origin: &LinuxPlatformProfileOrigin, artifact: TelemetryAr
             LinuxPlatformProfileOrigin::StaticSimulation { .. },
             TelemetryArtifact::StaticSimulation
         ) | (
-            LinuxPlatformProfileOrigin::LinuxReadOnlyReserved { .. },
+            LinuxPlatformProfileOrigin::LinuxReadOnly { .. },
             TelemetryArtifact::LinuxReadOnly
         )
     )
@@ -363,40 +391,53 @@ impl PlatformProfileByteSource for SimulatedPlatformProfileTree {
         }
     }
 
-    fn simulated_root_label(&self) -> &str {
-        &self.root_label
+    fn origin(&self) -> LinuxPlatformProfileOrigin {
+        LinuxPlatformProfileOrigin::StaticSimulation {
+            root_label: self.root_label.clone(),
+        }
     }
 }
 
 impl private::Sealed for SimulatedPlatformProfileTree {}
 
-// This source is deliberately compiled only into this crate's test binary.
-// Its constructor takes an already-open directory descriptor rather than a
-// path. Consequently, production code and the CLI cannot point it at the host
-// filesystem. The test helper below creates that descriptor solely for a fresh
-// temporary tree under the test process' temporary directory.
-#[cfg(test)]
-struct Openat2TestPlatformProfileSource {
+const MAXIMUM_PLATFORM_PROFILE_BYTES: usize = 4096;
+const MAX_INTERRUPTED_READS: usize = 2;
+
+/// Descriptor-confined implementation shared by isolated tests and the
+/// private production-shaped provider. It is intentionally private: callers
+/// cannot supply a directory, a path, or an origin label.
+struct ConfinedOpenat2PlatformProfileSource {
     root: File,
-    root_label: String,
+    origin: LinuxPlatformProfileOrigin,
 }
 
-#[cfg(test)]
-impl Openat2TestPlatformProfileSource {
-    const MAXIMUM_SIZE: usize = 4096;
-    const MAX_INTERRUPTED_READS: usize = 2;
-
+impl ConfinedOpenat2PlatformProfileSource {
+    #[cfg(test)]
     fn from_test_directory(root: File, root_label: impl Into<String>) -> Self {
         Self {
             root,
-            root_label: root_label.into(),
+            origin: LinuxPlatformProfileOrigin::StaticSimulation {
+                root_label: root_label.into(),
+            },
+        }
+    }
+
+    /// This constructor is private and is reachable only through the private,
+    /// capability-gated production provider below. Its existence alone does
+    /// not open sysfs: it only takes an already-open descriptor.
+    fn from_linux_directory(root: File) -> Self {
+        Self {
+            root,
+            origin: LinuxPlatformProfileOrigin::LinuxReadOnly {
+                interface: "sysfs-platform-profile",
+            },
         }
     }
 
     fn open_entry(&self, entry: PlatformProfileEntry) -> Result<File, PlatformProfileSourceError> {
-        // All resolution happens relative to `root`. The literal supplied to
-        // openat2 originates only from PlatformProfileEntry, never from CLI,
-        // environment, configuration, or a caller-supplied path.
+        // All resolution happens relative to `root`. The literal supplied
+        // to openat2 originates only from PlatformProfileEntry, never from
+        // CLI, environment, configuration, or a caller-supplied path.
         openat2(
             &self.root,
             entry.relative_name(),
@@ -414,7 +455,7 @@ impl Openat2TestPlatformProfileSource {
             if FileType::from_raw_mode(stat.st_mode) != FileType::RegularFile {
                 return Err(PlatformProfileSourceError::UnsafeEntry {
                     entry,
-                    reason: "opened entry is not a regular test fixture file".to_owned(),
+                    reason: "opened entry is not a regular file".to_owned(),
                 });
             }
             Ok(file)
@@ -433,19 +474,19 @@ impl Openat2TestPlatformProfileSource {
             let mut chunk = [0_u8; 512];
             // Ask for at most one byte beyond the cap. This detects excess
             // content while never retaining more than 4097 bytes.
-            let requested = (Self::MAXIMUM_SIZE + 1 - bytes.len()).min(chunk.len());
+            let requested = (MAXIMUM_PLATFORM_PROFILE_BYTES + 1 - bytes.len()).min(chunk.len());
             match read(&file, &mut chunk[..requested]) {
                 Ok(0) => return Ok(PlatformProfileSourceRead::Complete(bytes)),
                 Ok(count) => {
                     bytes.extend_from_slice(&chunk[..count]);
-                    if bytes.len() > Self::MAXIMUM_SIZE {
+                    if bytes.len() > MAXIMUM_PLATFORM_PROFILE_BYTES {
                         return Err(PlatformProfileSourceError::TooLarge {
                             entry,
-                            limit: Self::MAXIMUM_SIZE,
+                            limit: MAXIMUM_PLATFORM_PROFILE_BYTES,
                         });
                     }
                 }
-                Err(Errno::INTR) if interrupted_reads < Self::MAX_INTERRUPTED_READS => {
+                Err(Errno::INTR) if interrupted_reads < MAX_INTERRUPTED_READS => {
                     interrupted_reads += 1;
                 }
                 Err(Errno::INTR) => {
@@ -470,8 +511,7 @@ impl Openat2TestPlatformProfileSource {
     }
 }
 
-#[cfg(test)]
-impl PlatformProfileByteSource for Openat2TestPlatformProfileSource {
+impl PlatformProfileByteSource for ConfinedOpenat2PlatformProfileSource {
     fn read(
         &self,
         entry: PlatformProfileEntry,
@@ -480,27 +520,25 @@ impl PlatformProfileByteSource for Openat2TestPlatformProfileSource {
         // The isolated provider does not permit a caller to enlarge its cap.
         // Keeping the cap exact makes the 4096-byte policy independently
         // enforceable even if a generic reader is misconfigured in a test.
-        if maximum_size != Self::MAXIMUM_SIZE {
+        if maximum_size != MAXIMUM_PLATFORM_PROFILE_BYTES {
             return Err(PlatformProfileSourceError::ReadFailed {
                 entry,
                 reason: format!(
-                    "isolated openat2 source requires a {}-byte limit",
-                    Self::MAXIMUM_SIZE
+                    "confined openat2 source requires a {}-byte limit",
+                    MAXIMUM_PLATFORM_PROFILE_BYTES
                 ),
             });
         }
         self.read_complete(entry)
     }
 
-    fn simulated_root_label(&self) -> &str {
-        &self.root_label
+    fn origin(&self) -> LinuxPlatformProfileOrigin {
+        self.origin.clone()
     }
 }
 
-#[cfg(test)]
-impl private::Sealed for Openat2TestPlatformProfileSource {}
+impl private::Sealed for ConfinedOpenat2PlatformProfileSource {}
 
-#[cfg(test)]
 fn map_openat2_error(entry: PlatformProfileEntry, error: Errno) -> PlatformProfileSourceError {
     match error {
         Errno::NOENT => PlatformProfileSourceError::Missing { entry },
@@ -520,13 +558,128 @@ fn map_openat2_error(entry: PlatformProfileEntry, error: Errno) -> PlatformProfi
     }
 }
 
+/// Production integration stays intentionally unreachable in this phase. This
+/// private uninhabited type has no constructible value, even inside this crate
+/// without forbidden `unsafe`. A future, separately approved phase must make a
+/// reviewed, deliberate interface change before any sysfs descriptor can be
+/// opened.
+enum ApprovedRealReadActivation {}
+
+/// Private production-shaped provider. It is neither exported nor connected to
+/// the CLI. Its fixed descent is written here for static review only; no code
+/// path can construct it in this phase.
+struct SysfsPlatformProfileProvider {
+    reader: LinuxPlatformProfileReader<ConfinedOpenat2PlatformProfileSource>,
+}
+
+impl SysfsPlatformProfileProvider {
+    const SYSFS_ROOT: &'static str = "/sys";
+    const FIRMWARE_DIRECTORY: &'static str = "firmware";
+    const ACPI_DIRECTORY: &'static str = "acpi";
+
+    #[allow(dead_code)]
+    fn new(_activation: ApprovedRealReadActivation) -> Result<Self, SysfsProviderInitError> {
+        let sysfs = open_fixed_sysfs_root()?;
+        let firmware = open_confined_directory(&sysfs, Self::FIRMWARE_DIRECTORY)?;
+        let acpi = open_confined_directory(&firmware, Self::ACPI_DIRECTORY)?;
+        Ok(Self {
+            reader: LinuxPlatformProfileReader::new(
+                ConfinedOpenat2PlatformProfileSource::from_linux_directory(acpi),
+                MAXIMUM_PLATFORM_PROFILE_BYTES,
+            ),
+        })
+    }
+
+    #[allow(dead_code)]
+    fn read(&self) -> Result<LinuxPlatformProfileReading, LinuxPlatformProfileError> {
+        self.reader.read_consistent()
+    }
+}
+
+#[derive(Debug)]
+enum SysfsProviderInitError {
+    OpenRoot(Errno),
+    NotDirectory {
+        component: &'static str,
+    },
+    OpenComponent {
+        component: &'static str,
+        error: Errno,
+    },
+}
+
+impl fmt::Display for SysfsProviderInitError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::OpenRoot(error) => write!(f, "could not open the fixed sysfs root: {error}"),
+            Self::NotDirectory { component } => {
+                write!(f, "fixed sysfs component is not a directory: {component}")
+            }
+            Self::OpenComponent { component, error } => {
+                write!(
+                    f,
+                    "could not open fixed sysfs component {component}: {error}"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for SysfsProviderInitError {}
+
+fn open_fixed_sysfs_root() -> Result<File, SysfsProviderInitError> {
+    // This uses the only absolute path in the implementation. It is a private,
+    // fixed literal and cannot be reached until a future phase creates the
+    // activation capability. Relative components thereafter are descriptor
+    // confined by `open_confined_directory`.
+    let root = openat2(
+        CWD,
+        SysfsPlatformProfileProvider::SYSFS_ROOT,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+        Mode::empty(),
+        ResolveFlags::NO_MAGICLINKS | ResolveFlags::NO_SYMLINKS,
+    )
+    .map(File::from)
+    .map_err(SysfsProviderInitError::OpenRoot)?;
+    ensure_directory(&root, "/sys")?;
+    Ok(root)
+}
+
+fn open_confined_directory(
+    parent: &File,
+    component: &'static str,
+) -> Result<File, SysfsProviderInitError> {
+    let directory = openat2(
+        parent,
+        component,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+        Mode::empty(),
+        ResolveFlags::BENEATH | ResolveFlags::NO_MAGICLINKS | ResolveFlags::NO_SYMLINKS,
+    )
+    .map(File::from)
+    .map_err(|error| SysfsProviderInitError::OpenComponent { component, error })?;
+    ensure_directory(&directory, component)?;
+    Ok(directory)
+}
+
+fn ensure_directory(file: &File, component: &'static str) -> Result<(), SysfsProviderInitError> {
+    let stat =
+        fstat(file).map_err(|error| SysfsProviderInitError::OpenComponent { component, error })?;
+    if FileType::from_raw_mode(stat.st_mode) == FileType::Directory {
+        Ok(())
+    } else {
+        Err(SysfsProviderInitError::NotDirectory { component })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use legion_core::{PlatformProfileVocabulary, TelemetryState};
+    use std::{cell::RefCell, collections::VecDeque};
 
     const MAXIMUM_SIZE: usize = 128;
-    const OPENAT2_MAXIMUM_SIZE: usize = Openat2TestPlatformProfileSource::MAXIMUM_SIZE;
+    const OPENAT2_MAXIMUM_SIZE: usize = MAXIMUM_PLATFORM_PROFILE_BYTES;
     static NEXT_TEMPORARY_TREE: AtomicUsize = AtomicUsize::new(0);
 
     struct TemporaryTestTree {
@@ -567,7 +720,7 @@ mod tests {
                 .expect("test fixture writes only below its isolated root");
         }
 
-        fn source(&self) -> Openat2TestPlatformProfileSource {
+        fn source(&self) -> ConfinedOpenat2PlatformProfileSource {
             // Test setup also uses openat2, refusing symlinks before handing
             // the resulting directory descriptor to the source. The source
             // itself never receives a path.
@@ -579,7 +732,7 @@ mod tests {
                 ResolveFlags::NO_MAGICLINKS | ResolveFlags::NO_SYMLINKS,
             )
             .expect("test root must be an isolated non-symlink directory");
-            Openat2TestPlatformProfileSource::from_test_directory(
+            ConfinedOpenat2PlatformProfileSource::from_test_directory(
                 File::from(root),
                 "temporary-openat2-test-tree",
             )
@@ -594,7 +747,7 @@ mod tests {
 
     fn openat2_reader(
         tree: &TemporaryTestTree,
-    ) -> LinuxPlatformProfileReader<Openat2TestPlatformProfileSource> {
+    ) -> LinuxPlatformProfileReader<ConfinedOpenat2PlatformProfileSource> {
         LinuxPlatformProfileReader::new(tree.source(), OPENAT2_MAXIMUM_SIZE)
     }
 
@@ -606,6 +759,44 @@ mod tests {
 
     fn regular(value: &str) -> SimulatedEntry {
         SimulatedEntry::Regular(value.as_bytes().to_vec())
+    }
+
+    /// A fully in-memory sequence used only to prove the three-read coherence
+    /// rule. It cannot name a path or claim a real Linux provenance.
+    struct ChangingChoicesSource {
+        responses: RefCell<VecDeque<(PlatformProfileEntry, PlatformProfileSourceRead)>>,
+    }
+
+    impl ChangingChoicesSource {
+        fn new(responses: Vec<(PlatformProfileEntry, PlatformProfileSourceRead)>) -> Self {
+            Self {
+                responses: RefCell::new(responses.into()),
+            }
+        }
+    }
+
+    impl private::Sealed for ChangingChoicesSource {}
+
+    impl PlatformProfileByteSource for ChangingChoicesSource {
+        fn read(
+            &self,
+            entry: PlatformProfileEntry,
+            _maximum_size: usize,
+        ) -> Result<PlatformProfileSourceRead, PlatformProfileSourceError> {
+            let (expected_entry, response) = self
+                .responses
+                .borrow_mut()
+                .pop_front()
+                .expect("test sequence contains each expected read");
+            assert_eq!(entry, expected_entry, "coherence read order changed");
+            Ok(response)
+        }
+
+        fn origin(&self) -> LinuxPlatformProfileOrigin {
+            LinuxPlatformProfileOrigin::StaticSimulation {
+                root_label: "in-memory-consistency-test".to_owned(),
+            }
+        }
     }
 
     #[test]
@@ -981,11 +1172,36 @@ mod tests {
     }
 
     #[test]
-    fn reserved_linux_origin_has_a_distinct_future_provenance_label() {
-        let provenance = provenance_for(&LinuxPlatformProfileOrigin::LinuxReadOnlyReserved {
+    fn coherence_read_rejects_changed_choices_without_publishing_a_profile() {
+        let source = ChangingChoicesSource::new(vec![
+            (
+                PlatformProfileEntry::Choices,
+                PlatformProfileSourceRead::Complete(b"balanced performance\n".to_vec()),
+            ),
+            (
+                PlatformProfileEntry::Active,
+                PlatformProfileSourceRead::Complete(b"performance\n".to_vec()),
+            ),
+            (
+                PlatformProfileEntry::Choices,
+                PlatformProfileSourceRead::Complete(b"balanced\n".to_vec()),
+            ),
+        ]);
+        let reader = LinuxPlatformProfileReader::new(source, MAXIMUM_SIZE);
+        assert!(matches!(
+            reader.read_consistent(),
+            Err(LinuxPlatformProfileError::Source(
+                PlatformProfileSourceError::ConcurrentChange
+            ))
+        ));
+    }
+
+    #[test]
+    fn linux_origin_has_a_distinct_read_only_provenance_label() {
+        let provenance = provenance_for(&LinuxPlatformProfileOrigin::LinuxReadOnly {
             interface: "platform_profile",
         });
         assert_eq!(provenance.artifact, TelemetryArtifact::LinuxReadOnly);
-        assert!(provenance.source.starts_with("legion-linux::reserved:"));
+        assert!(provenance.source.starts_with("legion-linux::readonly:"));
     }
 }
