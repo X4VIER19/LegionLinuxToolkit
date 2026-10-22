@@ -194,9 +194,10 @@ revisión legal de textos de licencia o avisos de distribución.
 - Falta comprobar el comportamiento de enlaces y montajes de las dos rutas
   concretas; `RESOLVE_NO_SYMLINKS` podría ser correcto o podría romper una ruta
   legítima.
-- Falta decidir si la dependencia necesaria para una interfaz Rust segura de
-  `openat2` puede incorporarse bajo la licencia dual y las restricciones de
-  dependencias. No se añade ninguna en esta fase.
+- `rustix 1.1.5` se aceptó posteriormente para el proveedor aislado de
+  pruebas, tras revisar las licencias declaradas. Falta decidir por separado
+  si su uso en un proveedor de producción respeta la política de activación,
+  errores y semántica sysfs diseñada para el 83EX.
 - `openat2` no ofrece una transacción entre los dos atributos; la política de
   doble lectura reduce mezclas, no prueba que el firmware no cambie de nuevo
   inmediatamente después.
