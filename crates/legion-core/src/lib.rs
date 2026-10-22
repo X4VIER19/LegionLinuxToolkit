@@ -6,6 +6,7 @@ use serde::Serialize;
 use std::fmt;
 
 mod compatibility;
+mod host_identity;
 mod platform_profile;
 mod telemetry;
 mod wmi;
@@ -13,6 +14,11 @@ mod wmi;
 pub use compatibility::{
     CapabilityRecord, CompatibilityProfile, CompatibilityRegistry, CompatibilityStatus,
     DeviceDescriptor, DeviceQuery, Evidence, EvidenceKind, MatchResult, ObservationPlatform,
+};
+pub use host_identity::{
+    HostCompatibilityEnvironment, HostCompatibilityEvaluator, HostCompatibilityResult,
+    HostIdentity, HostIdentityError, HostIdentityInput, HostIdentityOrigin,
+    HostIdentityVerification, RealReadAuthorization,
 };
 pub use platform_profile::{
     NormalizedPlatformProfile, NormalizedPlatformProfiles, PlatformProfileAdapter,

@@ -4,6 +4,7 @@ use legion_core::{
     CapabilityRecord, CompatibilityProfile, CompatibilityRegistry, CompatibilityStatus,
     ConfidenceLevel, DeviceDescriptor, DeviceIdentity, DeviceQuery, EnergyProfile, EnergyProfiles,
     Evidence, EvidenceKind, FanInterpretation, FanTelemetry, FanValidation, FrequencyReading,
+    HostCompatibilityEnvironment, HostIdentity, HostIdentityError, HostIdentityInput,
     ObservationPlatform, PlatformProfileAdapter, PlatformProfileError, PlatformProfileInput,
     PlatformProfileRawInput, PlatformProfileReading, PowerReading, PowerReadingKind,
     TelemetryArtifact, TelemetryError, TelemetryProvenance, TelemetrySnapshot, TelemetryState,
@@ -98,6 +99,91 @@ pub fn compatibility_query(name: &str) -> Option<DeviceQuery> {
             ..DeviceQuery::default()
         }),
         _ => None,
+    }
+}
+
+/// Closed, in-memory identity cases for compatibility tests and UI demos. No
+/// case performs host discovery or can represent a verified identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HostIdentityScenario {
+    Exact,
+    BiosMismatch,
+    UnknownModel,
+    DifferentManufacturer,
+    Incomplete,
+    Contradictory,
+    Malformed,
+}
+
+pub fn host_identity_scenario(name: &str) -> Option<HostIdentityScenario> {
+    match name {
+        "exact" => Some(HostIdentityScenario::Exact),
+        "bios-mismatch" => Some(HostIdentityScenario::BiosMismatch),
+        "unknown-model" => Some(HostIdentityScenario::UnknownModel),
+        "different-manufacturer" => Some(HostIdentityScenario::DifferentManufacturer),
+        "incomplete" => Some(HostIdentityScenario::Incomplete),
+        "contradictory" => Some(HostIdentityScenario::Contradictory),
+        "malformed" => Some(HostIdentityScenario::Malformed),
+        _ => None,
+    }
+}
+
+/// Constructs only declared static identities. It is deliberately unable to
+/// return a host-observed or verified identity.
+pub fn simulated_host_identity(
+    scenario: HostIdentityScenario,
+) -> Result<HostIdentity, HostIdentityError> {
+    let mut input = known_host_identity_input();
+    let label = match scenario {
+        HostIdentityScenario::Exact => "legion-fixtures::host-identity::exact",
+        HostIdentityScenario::BiosMismatch => {
+            input.bios_version = Some("UNVERIFIED-BIOS".to_owned());
+            "legion-fixtures::host-identity::bios-mismatch"
+        }
+        HostIdentityScenario::UnknownModel => {
+            input.product_identifier = Some("UNKNOWN".to_owned());
+            input.model = Some("Unknown Legion".to_owned());
+            "legion-fixtures::host-identity::unknown-model"
+        }
+        HostIdentityScenario::DifferentManufacturer => {
+            input.manufacturer = Some("Other".to_owned());
+            "legion-fixtures::host-identity::different-manufacturer"
+        }
+        HostIdentityScenario::Incomplete => {
+            input.bios_version = None;
+            "legion-fixtures::host-identity::incomplete"
+        }
+        HostIdentityScenario::Contradictory => {
+            input.model = Some("Different Model".to_owned());
+            "legion-fixtures::host-identity::contradictory"
+        }
+        HostIdentityScenario::Malformed => {
+            input.model = Some("Legion\nSlim".to_owned());
+            "legion-fixtures::host-identity::malformed"
+        }
+    };
+    HostIdentity::declared_simulation(input, label)
+}
+
+/// The environmental evidence is static documentation for the existing
+/// 83EX/NUCN15WW registry profile; it does not inspect the local host.
+pub fn known_host_compatibility_environment() -> HostCompatibilityEnvironment {
+    HostCompatibilityEnvironment::declared_simulation(
+        "lenovo-legion-slim-5-16arp9-83ex-nucn15ww",
+        "7.2.0-202.nobara.fc44.x86_64",
+        "Nobara Linux",
+    )
+    .expect("embedded fixture values are valid")
+}
+
+fn known_host_identity_input() -> HostIdentityInput {
+    HostIdentityInput {
+        manufacturer: Some("Lenovo".to_owned()),
+        product_identifier: Some("83EX".to_owned()),
+        model: Some("Legion Slim 5 16ARP9".to_owned()),
+        bios_version: Some("NUCN15WW".to_owned()),
+        kernel_version: Some("7.2.0-202.nobara.fc44.x86_64".to_owned()),
+        distribution: Some("Nobara Linux".to_owned()),
     }
 }
 
@@ -479,6 +565,66 @@ fn windows_evidence(summary: &str) -> Evidence {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use legion_core::{
+        HostCompatibilityEvaluator, HostCompatibilityResult, HostIdentityOrigin,
+        HostIdentityVerification,
+    };
+
+    #[test]
+    fn host_identity_scenarios_are_closed_static_simulations() {
+        assert!(host_identity_scenario("/sys").is_none());
+        assert!(host_identity_scenario("exact").is_some());
+        let identity = simulated_host_identity(HostIdentityScenario::Exact).unwrap();
+        assert!(matches!(
+            identity.origin(),
+            HostIdentityOrigin::StaticSimulation { .. }
+        ));
+    }
+
+    #[test]
+    fn host_identity_fixtures_preserve_compatibility_outcomes() {
+        let registry = legion_slim_5_16arp9_registry();
+        let environment = known_host_compatibility_environment();
+        let evaluator = HostCompatibilityEvaluator::new(&registry, &environment);
+
+        assert!(matches!(
+            evaluator.evaluate(&simulated_host_identity(HostIdentityScenario::Exact).unwrap()),
+            HostCompatibilityResult::Compatible {
+                verification: HostIdentityVerification::UnverifiedStaticSimulation,
+                ..
+            }
+        ));
+        assert!(matches!(
+            evaluator
+                .evaluate(&simulated_host_identity(HostIdentityScenario::BiosMismatch).unwrap()),
+            HostCompatibilityResult::Contradictory { .. }
+        ));
+        assert!(matches!(
+            evaluator
+                .evaluate(&simulated_host_identity(HostIdentityScenario::UnknownModel).unwrap()),
+            HostCompatibilityResult::Unknown { .. }
+        ));
+        assert!(matches!(
+            evaluator.evaluate(
+                &simulated_host_identity(HostIdentityScenario::DifferentManufacturer).unwrap()
+            ),
+            HostCompatibilityResult::Incompatible { .. }
+        ));
+        assert!(matches!(
+            evaluator.evaluate(&simulated_host_identity(HostIdentityScenario::Incomplete).unwrap()),
+            HostCompatibilityResult::InsufficientEvidence { .. }
+        ));
+        assert!(matches!(
+            evaluator
+                .evaluate(&simulated_host_identity(HostIdentityScenario::Contradictory).unwrap()),
+            HostCompatibilityResult::Contradictory { .. }
+        ));
+        assert!(matches!(
+            simulated_host_identity(HostIdentityScenario::Malformed),
+            Err(HostIdentityError::Malformed { .. })
+        ));
+    }
+
     #[test]
     fn rejects_host_path_names() {
         assert!(named("/sys").is_none());
