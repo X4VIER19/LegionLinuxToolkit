@@ -26,6 +26,13 @@ use std::{
     fmt,
 };
 
+mod host_identity;
+
+pub use host_identity::{
+    HostIdentityField, HostIdentitySource, HostIdentitySourceError, LinuxHostIdentityError,
+    LinuxHostIdentityProvider, SimulatedLinuxHostIdentitySource,
+};
+
 #[cfg(any(test, feature = "approved-real-platform-profile-read"))]
 use std::fs::File;
 
