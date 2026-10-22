@@ -47,6 +47,15 @@ monitorización futura:
   `lenovo_wmi_other`;
 - detección pasiva de las interfaces de ventilación disponibles.
 
+El 2026-10-21, una única ejecución experimental autorizada leyó de forma
+coherente el perfil `performance` y las opciones
+`low-power balanced performance max-power custom` desde las dos interfaces
+fijas de `platform_profile`. El resultado quedó marcado como
+`linux-read-only` con confianza baja. Esto valida únicamente esa lectura en el
+83EX/`NUCN15WW`/Nobara documentado: no valida controles, escritura, futuros
+accesos, ventiladores, WMI, ACPI o EC. La feature experimental continúa
+desactivada por defecto y no está conectada a `legion-cli`.
+
 El soporte de ventiladores de este modelo no está demostrado: `acpi_fan` y
 `yogafan` informaron 0 RPM en las pruebas, y el kernel registró que el informe
 y ajuste de ventilador no están soportados. Las lecturas de 0 RPM **no** se
@@ -108,6 +117,7 @@ están separados de las hipótesis en [docs/known-interfaces.md](docs/known-inte
 - [Investigación de telemetría Linux](docs/linux-telemetry-research.md)
 - [Adaptador simulado de `platform_profile`](docs/platform-profile-simulation.md)
 - [Adaptador Linux simulado de `platform_profile`](docs/linux-platform-profile-adapter.md)
+- [Diseño y primer hito de lectura real de `platform_profile`](docs/linux-platform-profile-first-read-proposal.md)
 - [Arquitectura modular](docs/architecture.md)
 - [Plan incremental](docs/development-plan.md)
 - [Fuentes y licencias](docs/research-sources.md)

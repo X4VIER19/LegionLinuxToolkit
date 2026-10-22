@@ -97,9 +97,9 @@ fn text(response: &ExperimentResponse) -> String {
         ExperimentOutcome::Reading { reading } => format!(
             "Platform-profile isolated simulation only\nScenario: {}\nState: {}\nProvenance: {} ({})\nNo host path, sysfs, firmware, or energy profile was accessed or changed.",
             response.scenario,
-            reading.profile.state.as_str(),
-            reading.profile.provenance.source,
-            reading.profile.provenance.confidence.as_str(),
+            reading.profile().state.as_str(),
+            reading.profile().provenance.source,
+            reading.profile().provenance.confidence.as_str(),
         ),
         ExperimentOutcome::Error { message } => format!(
             "Platform-profile isolated simulation only\nScenario: {}\nProvenance: {}\nSimulated result: error: {message}\nNo host path, sysfs, firmware, or energy profile was accessed or changed.",

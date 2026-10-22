@@ -20,6 +20,45 @@ cambios con otras interfaces Lenovo. El perfil `custom` es el modo que el
 firmware usa para habilitar ajustes de PPT y curva, pero esta fase no cambia a
 ese perfil ni modifica dichos valores.
 
+### Hito: primera lectura real aislada
+
+El 2026-10-21 se realizó una única ejecución explícitamente autorizada del
+binario experimental de solo lectura de LegionLinuxToolkit. Se ejecutó sin
+`sudo`, con la feature no predeterminada
+`approved-real-platform-profile-read`, confirmación literal requerida y salida
+JSON. El binario no acepta raíces, rutas, variables de entorno, reintentos ni
+opciones de escritura; `legion-cli` no intervino.
+
+La secuencia `platform_profile_choices → platform_profile →
+platform_profile_choices` completó correctamente y devolvió:
+
+| Atributo | Texto observado |
+| --- | --- |
+| Perfil activo | `performance` |
+| Opciones, primera y segunda lectura | `low-power balanced performance max-power custom` |
+
+Las dos lecturas de opciones fueron idénticas. El resultado se publicó con
+artefacto y origen `linux-read-only`/`LinuxReadOnly`, fuente
+`legion-linux::readonly:sysfs-platform-profile` y confianza `low`.
+
+**Validado únicamente por este hito:** en el 83EX con BIOS `NUCN15WW` y el
+entorno Nobara documentado, una ejecución del proveedor experimental pudo
+abrir las rutas fijas autorizadas, completar las tres lecturas dentro de los
+límites configurados, validar formato UTF-8 y consistencia, y terminar sin
+errores reportados. No cambió ningún perfil, ventilador, límite, firmware ni
+módulo.
+
+**Límites:** la igualdad antes/después de `platform_profile_choices` detecta
+algunos cambios concurrentes, no una instantánea atómica ni un cambio A→B→A.
+Esta observación no prueba que una lectura futura tendrá el mismo resultado,
+ni demuestra que el controlador sea pasivo en todas las condiciones.
+
+**No validado:** escritura o cambio de perfiles; comportamiento de potencia,
+temperaturas o ventiladores; WMI, ACPI, EC, curvas, `Fan_Set_Table`; otras
+BIOS, equipos, kernels o distribuciones; y el uso permanente o automático del
+proveedor. La feature sigue desactivada por defecto y cada nueva lectura real
+requiere autorización independiente.
+
 ## Atributos de energía
 
 `lenovo_wmi_other` expone atributos en:

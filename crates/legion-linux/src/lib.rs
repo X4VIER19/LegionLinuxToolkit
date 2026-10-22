@@ -1,17 +1,20 @@
-//! Linux-facing platform-profile architecture with no public host filesystem
-//! access.
+//! Linux-facing platform-profile architecture with no default public host
+//! filesystem access.
 //!
 //! This crate deliberately accepts bytes from an injected source. Phase 5B.3
 //! includes the virtual, in-memory source below. It also contains a private,
 //! production-shaped `openat2` provider behind an unconstructable activation
 //! capability. There is no public filesystem reader, configurable path, host
-//! root, fallback to `/sys`, write API, or CLI integration. Consequently this
-//! build cannot initiate a host read; tests use only temporary fixture trees.
+//! root, fallback to `/sys`, write API, or CLI integration. Normal builds
+//! cannot initiate a host read; tests use only temporary fixture trees. A
+//! future real read is compiled only by the non-default, explicitly named
+//! experimental feature and is not exercised in this phase.
 
 use legion_core::{
     ConfidenceLevel, PlatformProfileAdapter, PlatformProfileError, PlatformProfileInput,
     PlatformProfileRawInput, PlatformProfileReading, TelemetryArtifact, TelemetryProvenance,
 };
+#[cfg(any(test, feature = "approved-real-platform-profile-read"))]
 use rustix::{
     fs::{CWD, FileType, Mode, OFlags, ResolveFlags, fstat, openat2},
     io::{Errno, read},
@@ -21,8 +24,13 @@ use std::{
     cell::RefCell,
     collections::{BTreeMap, VecDeque},
     fmt,
-    fs::File,
 };
+
+#[cfg(any(test, feature = "approved-real-platform-profile-read"))]
+use std::fs::File;
+
+#[cfg(feature = "approved-real-platform-profile-read")]
+use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 
 #[cfg(test)]
 use std::{
@@ -57,15 +65,51 @@ impl PlatformProfileEntry {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum LinuxPlatformProfileOrigin {
     StaticSimulation { root_label: String },
-    LinuxReadOnly { interface: &'static str },
+    LinuxReadOnly { origin: LinuxReadOnlyOrigin },
+}
+
+/// Marker attached only by the private provider after it has completed its
+/// confined, validated Linux read. Its field and constructor are private, so
+/// downstream code cannot manufacture this marker.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LinuxReadOnlyOrigin {
+    interface: &'static str,
+}
+
+impl LinuxReadOnlyOrigin {
+    #[cfg(any(test, feature = "approved-real-platform-profile-read"))]
+    fn for_verified_read() -> Self {
+        Self {
+            interface: "sysfs-platform-profile",
+        }
+    }
+
+    pub fn interface(&self) -> &'static str {
+        self.interface
+    }
 }
 
 /// Parsed data plus its acquisition class. The embedded core provenance is
 /// checked against this origin before the result is published.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct LinuxPlatformProfileReading {
-    pub profile: PlatformProfileReading,
-    pub origin: LinuxPlatformProfileOrigin,
+    profile: PlatformProfileReading,
+    origin: LinuxPlatformProfileOrigin,
+}
+
+impl LinuxPlatformProfileReading {
+    /// Returns the validated domain reading. Consumers cannot replace it or
+    /// pair it with a different acquisition origin.
+    pub fn profile(&self) -> &PlatformProfileReading {
+        &self.profile
+    }
+
+    /// Returns the origin assigned by the sealed byte source. This is exposed
+    /// for inspection only; constructing a reading with a chosen origin is not
+    /// public API.
+    pub fn origin(&self) -> &LinuxPlatformProfileOrigin {
+        &self.origin
+    }
 }
 
 /// Explicit source errors. A later filesystem provider must convert its I/O
@@ -260,15 +304,25 @@ where
         active: String,
         choices: String,
     ) -> Result<LinuxPlatformProfileReading, LinuxPlatformProfileError> {
-        let origin = self.source.origin();
-        let provenance = provenance_for(&origin);
         let profile = PlatformProfileAdapter.parse(PlatformProfileInput {
             raw: PlatformProfileRawInput {
                 active: Some(active),
                 choices: Some(choices),
             },
-            provenance,
+            // The adapter requires provenance, but the source-specific marker
+            // is deliberately obtained only after parsing succeeds below.
+            provenance: TelemetryProvenance {
+                artifact: TelemetryArtifact::StaticSimulation,
+                source: "legion-linux::pending-origin".to_owned(),
+                confidence: ConfidenceLevel::Low,
+            },
         })?;
+        let origin = self.source.origin();
+        let provenance = provenance_for(&origin);
+        let profile = PlatformProfileReading {
+            provenance,
+            ..profile
+        };
         if !provenance_matches(&origin, profile.provenance.artifact) {
             return Err(LinuxPlatformProfileError::ProvenanceMismatch);
         }
@@ -301,9 +355,9 @@ fn provenance_for(origin: &LinuxPlatformProfileOrigin) -> TelemetryProvenance {
             source: format!("legion-linux::simulated-root:{root_label}"),
             confidence: ConfidenceLevel::Low,
         },
-        LinuxPlatformProfileOrigin::LinuxReadOnly { interface } => TelemetryProvenance {
+        LinuxPlatformProfileOrigin::LinuxReadOnly { origin } => TelemetryProvenance {
             artifact: TelemetryArtifact::LinuxReadOnly,
-            source: format!("legion-linux::readonly:{interface}"),
+            source: format!("legion-linux::readonly:{}", origin.interface()),
             confidence: ConfidenceLevel::Low,
         },
     }
@@ -555,36 +609,47 @@ impl PlatformProfileByteSource for SequencedStaticSimulationSource {
 }
 
 const MAXIMUM_PLATFORM_PROFILE_BYTES: usize = 4096;
+#[cfg(any(test, feature = "approved-real-platform-profile-read"))]
 const MAX_INTERRUPTED_READS: usize = 2;
 
 /// Descriptor-confined implementation shared by isolated tests and the
 /// private production-shaped provider. It is intentionally private: callers
 /// cannot supply a directory, a path, or an origin label.
+#[cfg(any(test, feature = "approved-real-platform-profile-read"))]
 struct ConfinedOpenat2PlatformProfileSource {
     root: File,
-    origin: LinuxPlatformProfileOrigin,
+    origin_kind: ConfinedSourceOrigin,
 }
 
+#[cfg(any(test, feature = "approved-real-platform-profile-read"))]
+enum ConfinedSourceOrigin {
+    #[cfg(test)]
+    StaticSimulation { root_label: String },
+    #[cfg(feature = "approved-real-platform-profile-read")]
+    VerifiedLinuxOnly,
+}
+
+#[cfg(any(test, feature = "approved-real-platform-profile-read"))]
 impl ConfinedOpenat2PlatformProfileSource {
     #[cfg(test)]
     fn from_test_directory(root: File, root_label: impl Into<String>) -> Self {
         Self {
             root,
-            origin: LinuxPlatformProfileOrigin::StaticSimulation {
+            origin_kind: ConfinedSourceOrigin::StaticSimulation {
                 root_label: root_label.into(),
             },
         }
     }
 
-    /// This constructor is private and is reachable only through the private,
-    /// capability-gated production provider below. Its existence alone does
-    /// not open sysfs: it only takes an already-open descriptor.
+    /// This constructor is private and compiled only with the separately
+    /// approved experimental feature. It is reachable only through the
+    /// private production provider below. Its existence alone does not open
+    /// sysfs: it only takes an already-open descriptor.
+    #[cfg(feature = "approved-real-platform-profile-read")]
     fn from_linux_directory(root: File) -> Self {
         Self {
             root,
-            origin: LinuxPlatformProfileOrigin::LinuxReadOnly {
-                interface: "sysfs-platform-profile",
-            },
+            origin_kind: ConfinedSourceOrigin::VerifiedLinuxOnly,
         }
     }
 
@@ -665,6 +730,7 @@ impl ConfinedOpenat2PlatformProfileSource {
     }
 }
 
+#[cfg(any(test, feature = "approved-real-platform-profile-read"))]
 impl PlatformProfileByteSource for ConfinedOpenat2PlatformProfileSource {
     fn read(
         &self,
@@ -687,12 +753,25 @@ impl PlatformProfileByteSource for ConfinedOpenat2PlatformProfileSource {
     }
 
     fn origin(&self) -> LinuxPlatformProfileOrigin {
-        self.origin.clone()
+        match &self.origin_kind {
+            #[cfg(test)]
+            ConfinedSourceOrigin::StaticSimulation { root_label } => {
+                LinuxPlatformProfileOrigin::StaticSimulation {
+                    root_label: root_label.clone(),
+                }
+            }
+            #[cfg(feature = "approved-real-platform-profile-read")]
+            ConfinedSourceOrigin::VerifiedLinuxOnly => LinuxPlatformProfileOrigin::LinuxReadOnly {
+                origin: LinuxReadOnlyOrigin::for_verified_read(),
+            },
+        }
     }
 }
 
+#[cfg(any(test, feature = "approved-real-platform-profile-read"))]
 impl private::Sealed for ConfinedOpenat2PlatformProfileSource {}
 
+#[cfg(any(test, feature = "approved-real-platform-profile-read"))]
 fn map_openat2_error(entry: PlatformProfileEntry, error: Errno) -> PlatformProfileSourceError {
     match error {
         Errno::NOENT => PlatformProfileSourceError::Missing { entry },
@@ -712,20 +791,92 @@ fn map_openat2_error(entry: PlatformProfileEntry, error: Errno) -> PlatformProfi
     }
 }
 
-/// Production integration stays intentionally unreachable in this phase. This
-/// private uninhabited type has no constructible value, even inside this crate
-/// without forbidden `unsafe`. A future, separately approved phase must make a
-/// reviewed, deliberate interface change before any sysfs descriptor can be
-/// opened.
-enum ApprovedRealReadActivation {}
+/// Production integration is compiled only with the non-default experimental
+/// feature. Without that feature this private type remains uninhabited, so no
+/// safe code path can construct the provider or open sysfs.
+#[cfg(feature = "approved-real-platform-profile-read")]
+enum ApprovedRealReadActivation {
+    #[cfg(feature = "approved-real-platform-profile-read")]
+    ApprovedOneShot,
+}
+
+#[cfg(feature = "approved-real-platform-profile-read")]
+const REQUIRED_REAL_READ_CONFIRMATION: &str = "I-UNDERSTAND-READ-ONLY-SYSFS";
+
+/// This guard limits the experimental facade to one attempt per process. It
+/// intentionally does not record permission for another process invocation.
+#[cfg(feature = "approved-real-platform-profile-read")]
+static ONE_SHOT_CONSUMED: AtomicBool = AtomicBool::new(false);
+
+/// Errors returned by the feature-gated experimental facade. They do not
+/// contain a partial reading or assign Linux provenance on any failure.
+#[cfg(feature = "approved-real-platform-profile-read")]
+#[derive(Debug)]
+pub enum ExperimentalRealReadError {
+    ConfirmationRequired,
+    AlreadyAttempted,
+    Initialization { stage: &'static str, error: Errno },
+    UnexpectedObject { component: &'static str },
+    Reading(LinuxPlatformProfileError),
+}
+
+#[cfg(feature = "approved-real-platform-profile-read")]
+impl fmt::Display for ExperimentalRealReadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ConfirmationRequired => write!(f, "the exact read-only confirmation is required"),
+            Self::AlreadyAttempted => write!(
+                f,
+                "the one-shot real read was already attempted in this process"
+            ),
+            Self::Initialization { stage, error } => {
+                write!(
+                    f,
+                    "could not initialize confined sysfs access at {stage}: {error}"
+                )
+            }
+            Self::UnexpectedObject { component } => {
+                write!(f, "fixed sysfs component is not a directory: {component}")
+            }
+            Self::Reading(error) => error.fmt(f),
+        }
+    }
+}
+
+#[cfg(feature = "approved-real-platform-profile-read")]
+impl std::error::Error for ExperimentalRealReadError {}
+
+/// Performs the feature-gated, explicit one-shot real read. This is the sole
+/// public activation surface; it has no root/path parameter, environment
+/// configuration, fallback, retry, or monitoring behavior. It is not built in
+/// normal configurations and must only be called by the separately approved
+/// experimental binary.
+#[cfg(feature = "approved-real-platform-profile-read")]
+#[doc(hidden)]
+pub fn approved_one_shot_platform_profile_read(
+    confirmation: &str,
+) -> Result<LinuxPlatformProfileReading, ExperimentalRealReadError> {
+    if confirmation != REQUIRED_REAL_READ_CONFIRMATION {
+        return Err(ExperimentalRealReadError::ConfirmationRequired);
+    }
+    ONE_SHOT_CONSUMED
+        .compare_exchange(false, true, AtomicOrdering::SeqCst, AtomicOrdering::SeqCst)
+        .map_err(|_| ExperimentalRealReadError::AlreadyAttempted)?;
+
+    let provider = SysfsPlatformProfileProvider::new(ApprovedRealReadActivation::ApprovedOneShot)
+        .map_err(ExperimentalRealReadError::from)?;
+    provider.read().map_err(ExperimentalRealReadError::Reading)
+}
 
 /// Private production-shaped provider. It is neither exported nor connected to
 /// the CLI. Its fixed descent is written here for static review only; no code
 /// path can construct it in this phase.
+#[cfg(feature = "approved-real-platform-profile-read")]
 struct SysfsPlatformProfileProvider {
     reader: LinuxPlatformProfileReader<ConfinedOpenat2PlatformProfileSource>,
 }
 
+#[cfg(feature = "approved-real-platform-profile-read")]
 impl SysfsPlatformProfileProvider {
     const SYSFS_ROOT: &'static str = "/sys";
     const FIRMWARE_DIRECTORY: &'static str = "firmware";
@@ -750,6 +901,7 @@ impl SysfsPlatformProfileProvider {
     }
 }
 
+#[cfg(feature = "approved-real-platform-profile-read")]
 #[derive(Debug)]
 enum SysfsProviderInitError {
     OpenRoot(Errno),
@@ -762,6 +914,26 @@ enum SysfsProviderInitError {
     },
 }
 
+#[cfg(feature = "approved-real-platform-profile-read")]
+impl From<SysfsProviderInitError> for ExperimentalRealReadError {
+    fn from(error: SysfsProviderInitError) -> Self {
+        match error {
+            SysfsProviderInitError::OpenRoot(error) => Self::Initialization {
+                stage: "/sys",
+                error,
+            },
+            SysfsProviderInitError::NotDirectory { component } => {
+                Self::UnexpectedObject { component }
+            }
+            SysfsProviderInitError::OpenComponent { component, error } => Self::Initialization {
+                stage: component,
+                error,
+            },
+        }
+    }
+}
+
+#[cfg(feature = "approved-real-platform-profile-read")]
 impl fmt::Display for SysfsProviderInitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -779,8 +951,10 @@ impl fmt::Display for SysfsProviderInitError {
     }
 }
 
+#[cfg(feature = "approved-real-platform-profile-read")]
 impl std::error::Error for SysfsProviderInitError {}
 
+#[cfg(feature = "approved-real-platform-profile-read")]
 fn open_fixed_sysfs_root() -> Result<File, SysfsProviderInitError> {
     // This uses the only absolute path in the implementation. It is a private,
     // fixed literal and cannot be reached until a future phase creates the
@@ -799,6 +973,7 @@ fn open_fixed_sysfs_root() -> Result<File, SysfsProviderInitError> {
     Ok(root)
 }
 
+#[cfg(feature = "approved-real-platform-profile-read")]
 fn open_confined_directory(
     parent: &File,
     component: &'static str,
@@ -816,6 +991,7 @@ fn open_confined_directory(
     Ok(directory)
 }
 
+#[cfg(feature = "approved-real-platform-profile-read")]
 fn ensure_directory(file: &File, component: &'static str) -> Result<(), SysfsProviderInitError> {
     let stat =
         fstat(file).map_err(|error| SysfsProviderInitError::OpenComponent { component, error })?;
@@ -1381,7 +1557,7 @@ mod tests {
     #[test]
     fn linux_origin_has_a_distinct_read_only_provenance_label() {
         let provenance = provenance_for(&LinuxPlatformProfileOrigin::LinuxReadOnly {
-            interface: "platform_profile",
+            origin: LinuxReadOnlyOrigin::for_verified_read(),
         });
         assert_eq!(provenance.artifact, TelemetryArtifact::LinuxReadOnly);
         assert!(provenance.source.starts_with("legion-linux::readonly:"));
