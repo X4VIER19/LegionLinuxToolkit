@@ -15,8 +15,8 @@ use crate::dmi_identity::DmiIdentityReading;
 #[cfg(feature = "approved-real-hwmon-rpm-read")]
 use crate::hwmon::build_linux_hwmon_reading;
 use crate::hwmon::{
-    HwmonDriverClassification, HwmonFanError, HwmonFanReading, HwmonReadingOrigin,
-    HwmonSourceError, build_reading, fan_input_channel, parse_name, parse_rpm,
+    HwmonDriverClassification, HwmonFanError, HwmonFanReading, HwmonModuleProvenance,
+    HwmonReadingOrigin, HwmonSourceError, build_reading, fan_input_channel, parse_name, parse_rpm,
 };
 #[cfg(feature = "approved-real-hwmon-rpm-read")]
 use legion_core::HostIdentity;
@@ -211,11 +211,9 @@ impl ConfinedHwmonSource {
                     entry: entry.clone(),
                     reason,
                 })?;
-                let classification = if name == "yogafan" && target_identity_matched {
-                    HwmonDriverClassification::Yogafan83ExCandidateUnverified
-                } else {
-                    HwmonDriverClassification::GenericUnvalidated
-                };
+                let module_provenance = self.module_provenance(&device_id);
+                let classification =
+                    classify_driver(&name, target_identity_matched, &module_provenance);
                 let reading = if let Some(label) = simulation_label {
                     build_reading(
                         name.clone(),
@@ -223,6 +221,7 @@ impl ConfinedHwmonSource {
                         channel,
                         rpm,
                         classification,
+                        module_provenance,
                         HwmonReadingOrigin::StaticSimulation { root_label: label },
                     )
                 } else {
@@ -234,6 +233,7 @@ impl ConfinedHwmonSource {
                             channel,
                             rpm,
                             classification,
+                            module_provenance,
                         )
                     }
                     #[cfg(not(feature = "approved-real-hwmon-rpm-read"))]
@@ -313,6 +313,47 @@ impl ConfinedHwmonSource {
             entry: entry.to_owned(),
             error,
         })
+    }
+
+    /// Reads only the final component of the fixed sysfs `module` link. The
+    /// link is evidence about driver provenance, not a writable control path.
+    /// Failure to obtain it does not manufacture a module identity.
+    fn module_provenance(&self, device_id: &str) -> HwmonModuleProvenance {
+        let link = self
+            .discovery_directory
+            .join(device_id)
+            .join("device/driver/module");
+        let Ok(target) = fs::read_link(link) else {
+            return HwmonModuleProvenance::Missing;
+        };
+        let Some(name) = target.file_name().and_then(|name| name.to_str()) else {
+            return HwmonModuleProvenance::Missing;
+        };
+        match name {
+            "yogafan_83ex" => HwmonModuleProvenance::Verified83ExExperimentalQuirk {
+                module_name: name.to_owned(),
+            },
+            "yogafan" => HwmonModuleProvenance::OriginalYogafan {
+                module_name: name.to_owned(),
+            },
+            _ => HwmonModuleProvenance::Unexpected {
+                module_name: name.to_owned(),
+            },
+        }
+    }
+}
+
+fn classify_driver(
+    driver_name: &str,
+    target_identity_matched: bool,
+    module_provenance: &HwmonModuleProvenance,
+) -> HwmonDriverClassification {
+    match (driver_name, target_identity_matched, module_provenance) {
+        ("yogafan", true, HwmonModuleProvenance::Verified83ExExperimentalQuirk { .. }) => {
+            HwmonDriverClassification::Verified83ExExperimentalQuirk
+        }
+        ("yogafan", true, _) => HwmonDriverClassification::Yogafan83ExCandidateUnverified,
+        _ => HwmonDriverClassification::GenericUnvalidated,
     }
 }
 
@@ -432,6 +473,40 @@ mod tests {
             source(&path).read_once(true, Some("isolated-test")),
             Err(HwmonFanError::Source { .. })
         ));
+        fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn distinguishes_verified_quirk_original_and_ambiguous_module_evidence() {
+        let path = root("module-evidence");
+        let device = path.join("class/hwmon/hwmon7");
+        fs::create_dir_all(device.join("device/driver")).unwrap();
+        symlink(
+            "/sys/module/yogafan_83ex",
+            device.join("device/driver/module"),
+        )
+        .unwrap();
+        let source = source(&path);
+        let verified = source.module_provenance("hwmon7");
+        assert!(matches!(
+            verified,
+            HwmonModuleProvenance::Verified83ExExperimentalQuirk { .. }
+        ));
+        assert_eq!(
+            classify_driver("yogafan", true, &verified),
+            HwmonDriverClassification::Verified83ExExperimentalQuirk
+        );
+        let original = HwmonModuleProvenance::OriginalYogafan {
+            module_name: "yogafan".to_owned(),
+        };
+        assert_eq!(
+            classify_driver("yogafan", true, &original),
+            HwmonDriverClassification::Yogafan83ExCandidateUnverified
+        );
+        assert_eq!(
+            classify_driver("yogafan", true, &HwmonModuleProvenance::Missing),
+            HwmonDriverClassification::Yogafan83ExCandidateUnverified
+        );
         fs::remove_dir_all(path).unwrap();
     }
 }

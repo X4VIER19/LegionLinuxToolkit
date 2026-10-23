@@ -94,11 +94,12 @@ fn text(reading: &HwmonLinuxReading) -> String {
         .fans
         .iter()
         .map(|fan| format!(
-            "- driver={} channel=fan{}_input reported={} RPM [classification={:?}; validation={:?}; interpretation={:?}; provenance={}]",
+            "- driver={} channel=fan{}_input reported={} RPM [classification={:?}; module={:?}; validation={:?}; interpretation={:?}; provenance={}]",
             fan.driver_name,
             fan.channel,
             fan.rpm.value.map_or_else(|| "<none>".to_owned(), |value| value.to_string()),
             fan.source_classification,
+            fan.module_provenance,
             fan.validation,
             fan.interpretation,
             fan.rpm.provenance.source,

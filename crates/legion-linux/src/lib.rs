@@ -58,8 +58,9 @@ pub use host_identity::{
     LinuxHostIdentityProvider, SimulatedLinuxHostIdentitySource,
 };
 pub use hwmon::{
-    HwmonDriverClassification, HwmonFanError, HwmonFanQuery, HwmonFanReading, HwmonSourceError,
-    LinuxHwmonFanReader, SimulatedHwmonDevice, SimulatedHwmonEntry, SimulatedHwmonTree,
+    HwmonDriverClassification, HwmonFanError, HwmonFanQuery, HwmonFanReading,
+    HwmonModuleProvenance, HwmonSourceError, LinuxHwmonFanReader, SimulatedHwmonDevice,
+    SimulatedHwmonEntry, SimulatedHwmonTree,
 };
 
 #[cfg(feature = "approved-real-hwmon-rpm-read")]

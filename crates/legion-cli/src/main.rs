@@ -432,11 +432,12 @@ fn text_fan_rpm(readings: &[legion_linux::HwmonFanReading]) -> String {
                 .then_some("; zero does not establish a stopped fan")
                 .unwrap_or("");
             format!(
-                "- driver={} channel=fan{}_input value={} RPM [source={:?}; validation={:?}; interpretation={:?}; provenance={} ({}){}]",
+                "- driver={} channel=fan{}_input value={} RPM [source={:?}; module={:?}; validation={:?}; interpretation={:?}; provenance={} ({}){}]",
                 reading.driver_name,
                 reading.channel,
                 reading.rpm.value.map_or_else(|| "<none>".to_owned(), |value| value.to_string()),
                 reading.source_classification,
+                reading.module_provenance,
                 reading.validation,
                 reading.interpretation,
                 reading.rpm.provenance.source,

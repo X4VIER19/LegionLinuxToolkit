@@ -33,7 +33,22 @@ pub enum HwmonDriverClassification {
     /// Exact 83EX DMI plus the hwmon `yogafan` name identify only a candidate:
     /// sysfs does not prove that the reviewed FA1S/FA2S ×100 quirk is loaded.
     Yogafan83ExCandidateUnverified,
+    #[serde(rename = "verified-83ex-experimental-quirk")]
+    Verified83ExExperimentalQuirk,
     GenericUnvalidated,
+}
+
+/// Module evidence is kept with every RPM report. A `yogafan` hwmon name is
+/// insufficient by itself: only the exact DMI gate plus the sysfs module link
+/// can identify the reviewed experimental 83EX quirk.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case", tag = "kind")]
+pub enum HwmonModuleProvenance {
+    StaticSimulation,
+    Verified83ExExperimentalQuirk { module_name: String },
+    OriginalYogafan { module_name: String },
+    Missing,
+    Unexpected { module_name: String },
 }
 
 /// One discovered, channel-neutral fan input. `channel` is the hwmon channel
@@ -46,6 +61,7 @@ pub struct HwmonFanReading {
     pub device_id: String,
     pub channel: u32,
     pub source_classification: HwmonDriverClassification,
+    pub module_provenance: HwmonModuleProvenance,
     pub rpm: TelemetryValue<u32>,
     pub validation: FanValidation,
     pub interpretation: FanInterpretation,
@@ -184,12 +200,21 @@ impl HwmonFanQuery for LinuxHwmonFanReader {
                         error,
                     }
                 })?;
+                let module_provenance =
+                    self.source.module_provenance(&device_id).map_err(|error| {
+                        HwmonFanError::Source {
+                            device_id: device_id.clone(),
+                            entry: "<module>".to_owned(),
+                            error,
+                        }
+                    })?;
                 readings.push(build_reading(
                     name.clone(),
                     device_id.clone(),
                     channel,
                     rpm,
                     classification,
+                    module_provenance,
                     HwmonReadingOrigin::StaticSimulation {
                         root_label: self.source.root_label(),
                     },
@@ -224,6 +249,7 @@ pub(crate) fn build_reading(
     channel: u32,
     value: u32,
     source_classification: HwmonDriverClassification,
+    module_provenance: HwmonModuleProvenance,
     origin: HwmonReadingOrigin<'_>,
 ) -> HwmonFanReading {
     let (state, validation, interpretation, confidence) = match source_classification {
@@ -247,6 +273,12 @@ pub(crate) fn build_reading(
             FanInterpretation::NonConclusive,
             ConfidenceLevel::Low,
         ),
+        HwmonDriverClassification::Verified83ExExperimentalQuirk => (
+            TelemetryState::Available,
+            FanValidation::Validated,
+            FanInterpretation::ReportedValue,
+            ConfidenceLevel::Medium,
+        ),
     };
     let (artifact, source) = match origin {
         HwmonReadingOrigin::StaticSimulation { root_label } => (
@@ -268,6 +300,7 @@ pub(crate) fn build_reading(
         device_id: device_id.clone(),
         channel,
         source_classification,
+        module_provenance,
         rpm: TelemetryValue {
             value: Some(value),
             unit: TelemetryUnit::Rpm,
@@ -301,6 +334,7 @@ pub(crate) fn build_linux_hwmon_reading(
     channel: u32,
     value: u32,
     source_classification: HwmonDriverClassification,
+    module_provenance: HwmonModuleProvenance,
 ) -> HwmonFanReading {
     build_reading(
         driver_name,
@@ -308,6 +342,7 @@ pub(crate) fn build_linux_hwmon_reading(
         channel,
         value,
         source_classification,
+        module_provenance,
         HwmonReadingOrigin::LinuxReadOnly,
     )
 }
@@ -379,6 +414,7 @@ pub enum SimulatedHwmonEntry {
 #[derive(Debug, Clone)]
 pub struct SimulatedHwmonDevice {
     classification: HwmonDriverClassification,
+    module_provenance: HwmonModuleProvenance,
     entries: BTreeMap<String, SimulatedHwmonEntry>,
 }
 
@@ -397,6 +433,7 @@ impl SimulatedHwmonDevice {
     fn new(classification: HwmonDriverClassification, name: impl Into<Vec<u8>>) -> Self {
         Self {
             classification,
+            module_provenance: HwmonModuleProvenance::StaticSimulation,
             entries: BTreeMap::from([(
                 HWMON_NAME.to_owned(),
                 SimulatedHwmonEntry::Regular(name.into()),
@@ -406,6 +443,11 @@ impl SimulatedHwmonDevice {
 
     pub fn with_entry(mut self, name: impl Into<String>, value: SimulatedHwmonEntry) -> Self {
         self.entries.insert(name.into(), value);
+        self
+    }
+
+    pub fn with_module_provenance(mut self, module_provenance: HwmonModuleProvenance) -> Self {
+        self.module_provenance = module_provenance;
         self
     }
 }
@@ -475,6 +517,16 @@ impl SimulatedHwmonTree {
         self.devices
             .get(device_id)
             .map(|device| device.classification)
+            .ok_or(HwmonSourceError::Missing)
+    }
+
+    fn module_provenance(
+        &self,
+        device_id: &str,
+    ) -> Result<HwmonModuleProvenance, HwmonSourceError> {
+        self.devices
+            .get(device_id)
+            .map(|device| device.module_provenance.clone())
             .ok_or(HwmonSourceError::Missing)
     }
 
