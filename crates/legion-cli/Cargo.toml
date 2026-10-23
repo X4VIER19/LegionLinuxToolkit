@@ -9,11 +9,19 @@ authors.workspace = true
 # Opt-in forwarding only. Normal legion-cli builds retain exclusively
 # simulated sources and cannot compile the experimental real-read binary.
 approved-real-platform-profile-read = ["legion-linux/approved-real-platform-profile-read"]
+# This forwards only to a separately named experimental binary. The default
+# `legion-cli` remains simulated-only and cannot acquire host hwmon data.
+approved-real-hwmon-rpm-read = ["legion-linux/approved-real-hwmon-rpm-read"]
 
 [[bin]]
 name = "legion-cli-platform-profile-real-read"
 path = "src/bin/legion-cli-platform-profile-real-read.rs"
 required-features = ["approved-real-platform-profile-read"]
+
+[[bin]]
+name = "legion-cli-hwmon-rpm-real-read"
+path = "src/bin/legion-cli-hwmon-rpm-real-read.rs"
+required-features = ["approved-real-hwmon-rpm-read"]
 
 [dependencies]
 legion-core = { path = "../legion-core" }

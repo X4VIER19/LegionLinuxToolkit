@@ -28,6 +28,8 @@ use std::{
 
 mod host_identity;
 mod hwmon;
+#[cfg(any(test, feature = "approved-real-hwmon-rpm-read"))]
+mod hwmon_real;
 mod offline_fan_response;
 
 #[cfg(any(
@@ -56,9 +58,12 @@ pub use host_identity::{
     LinuxHostIdentityProvider, SimulatedLinuxHostIdentitySource,
 };
 pub use hwmon::{
-    HwmonDriverClassification, HwmonFanError, HwmonFanQuery, HwmonFanReading, LinuxHwmonFanReader,
-    SimulatedHwmonDevice, SimulatedHwmonEntry, SimulatedHwmonTree,
+    HwmonDriverClassification, HwmonFanError, HwmonFanQuery, HwmonFanReading, HwmonSourceError,
+    LinuxHwmonFanReader, SimulatedHwmonDevice, SimulatedHwmonEntry, SimulatedHwmonTree,
 };
+
+#[cfg(feature = "approved-real-hwmon-rpm-read")]
+pub use hwmon_real::{HwmonLinuxReading, HwmonRealReadError, approved_one_shot_hwmon_rpm_read};
 pub use offline_fan_response::{
     OfflineFanResponseAnalysis, OfflineFanResponseError, OfflineFanResponseProvenance,
     analyze_offline_fan_response_file,

@@ -14,6 +14,10 @@ approved-real-platform-profile-read = []
 # activation, root path, or real-host constructor.
 experimental-dmi-identity-read = []
 approved-real-dmi-identity-read = ["experimental-dmi-identity-read"]
+# Explicitly opt-in; normal builds expose no host hwmon reader or executable.
+# It includes the already-reviewed one-shot DMI reader solely to gate the fixed
+# 83EX identity before a future RPM observation.
+approved-real-hwmon-rpm-read = ["approved-real-dmi-identity-read"]
 # Compiles an unconstructable fan-WMI transport shape only. It has no host
 # constructor and always fails closed: a supported kernel-space WMI driver is
 # still required before any firmware call can be considered.

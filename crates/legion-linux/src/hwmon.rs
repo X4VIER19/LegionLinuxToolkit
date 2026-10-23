@@ -30,6 +30,9 @@ const INPUT_SUFFIX: &str = "_input";
 pub enum HwmonDriverClassification {
     #[serde(rename = "validated-83ex-quirk-simulation")]
     Validated83ExQuirkSimulation,
+    /// Exact 83EX DMI plus the hwmon `yogafan` name identify only a candidate:
+    /// sysfs does not prove that the reviewed FA1S/FA2S ×100 quirk is loaded.
+    Yogafan83ExCandidateUnverified,
     GenericUnvalidated,
 }
 
@@ -57,7 +60,7 @@ pub enum HwmonFanError {
     Source {
         device_id: String,
         entry: String,
-        error: SimulatedHwmonError,
+        error: HwmonSourceError,
     },
     InvalidRpm {
         device_id: String,
@@ -73,16 +76,13 @@ pub enum HwmonFanError {
 impl fmt::Display for HwmonFanError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NoHwmonDevices => write!(f, "no simulated hwmon devices were discovered"),
+            Self::NoHwmonDevices => write!(f, "no hwmon devices were discovered"),
             Self::Source {
                 device_id,
                 entry,
                 error,
             } => {
-                write!(
-                    f,
-                    "simulated hwmon source {device_id}/{entry} failed: {error}"
-                )
+                write!(f, "hwmon source {device_id}/{entry} failed: {error}")
             }
             Self::InvalidRpm {
                 device_id,
@@ -190,7 +190,9 @@ impl HwmonFanQuery for LinuxHwmonFanReader {
                     channel,
                     rpm,
                     classification,
-                    self.source.root_label(),
+                    HwmonReadingOrigin::StaticSimulation {
+                        root_label: self.source.root_label(),
+                    },
                 ));
             }
         }
@@ -216,13 +218,13 @@ impl LinuxHwmonFanReader {
     }
 }
 
-fn build_reading(
+pub(crate) fn build_reading(
     driver_name: String,
     device_id: String,
     channel: u32,
     value: u32,
     source_classification: HwmonDriverClassification,
-    root_label: &str,
+    origin: HwmonReadingOrigin<'_>,
 ) -> HwmonFanReading {
     let (state, validation, interpretation, confidence) = match source_classification {
         HwmonDriverClassification::Validated83ExQuirkSimulation => (
@@ -239,6 +241,27 @@ fn build_reading(
             FanInterpretation::NonConclusive,
             ConfidenceLevel::Low,
         ),
+        HwmonDriverClassification::Yogafan83ExCandidateUnverified => (
+            TelemetryState::Unvalidated,
+            FanValidation::Unvalidated,
+            FanInterpretation::NonConclusive,
+            ConfidenceLevel::Low,
+        ),
+    };
+    let (artifact, source) = match origin {
+        HwmonReadingOrigin::StaticSimulation { root_label } => (
+            TelemetryArtifact::StaticSimulation,
+            format!(
+                "legion-linux::simulated-hwmon root={root_label}; driver={driver_name}; device={device_id}; channel=fan{channel}_input"
+            ),
+        ),
+        #[cfg(feature = "approved-real-hwmon-rpm-read")]
+        HwmonReadingOrigin::LinuxReadOnly => (
+            TelemetryArtifact::LinuxReadOnly,
+            format!(
+                "linux-hwmon-read-only; driver={driver_name}; device={device_id}; channel=fan{channel}_input"
+            ),
+        ),
     };
     HwmonFanReading {
         driver_name: driver_name.clone(),
@@ -251,10 +274,8 @@ fn build_reading(
             classification: ValueClassification::InstantaneousMeasurement,
             state,
             provenance: TelemetryProvenance {
-                artifact: TelemetryArtifact::StaticSimulation,
-                source: format!(
-                    "legion-linux::simulated-hwmon root={root_label}; driver={driver_name}; device={device_id}; channel=fan{channel}_input"
-                ),
+                artifact,
+                source,
                 confidence,
             },
         },
@@ -263,7 +284,35 @@ fn build_reading(
     }
 }
 
-fn parse_name(bytes: &[u8]) -> Result<String, String> {
+/// Only crate-internal production code can select `LinuxReadOnly`; the public
+/// in-memory fixture constructors always select `StaticSimulation`.
+pub(crate) enum HwmonReadingOrigin<'a> {
+    StaticSimulation {
+        root_label: &'a str,
+    },
+    #[cfg(feature = "approved-real-hwmon-rpm-read")]
+    LinuxReadOnly,
+}
+
+#[cfg(feature = "approved-real-hwmon-rpm-read")]
+pub(crate) fn build_linux_hwmon_reading(
+    driver_name: String,
+    device_id: String,
+    channel: u32,
+    value: u32,
+    source_classification: HwmonDriverClassification,
+) -> HwmonFanReading {
+    build_reading(
+        driver_name,
+        device_id,
+        channel,
+        value,
+        source_classification,
+        HwmonReadingOrigin::LinuxReadOnly,
+    )
+}
+
+pub(crate) fn parse_name(bytes: &[u8]) -> Result<String, String> {
     let value = std::str::from_utf8(bytes).map_err(|_| "name is not valid UTF-8".to_owned())?;
     let value = value.strip_suffix('\n').unwrap_or(value);
     if value.is_empty() || value.chars().any(char::is_control) {
@@ -272,7 +321,7 @@ fn parse_name(bytes: &[u8]) -> Result<String, String> {
     Ok(value.to_owned())
 }
 
-fn parse_rpm(bytes: &[u8]) -> Result<u32, String> {
+pub(crate) fn parse_rpm(bytes: &[u8]) -> Result<u32, String> {
     let value = std::str::from_utf8(bytes).map_err(|_| "input is not valid UTF-8".to_owned())?;
     let value = value.strip_suffix('\n').unwrap_or(value);
     if value.is_empty()
@@ -289,7 +338,7 @@ fn parse_rpm(bytes: &[u8]) -> Result<u32, String> {
         .map_err(|_| "input is not an unsigned RPM integer".to_owned())
 }
 
-fn fan_input_channel(entry: &str) -> Option<u32> {
+pub(crate) fn fan_input_channel(entry: &str) -> Option<u32> {
     let digits = entry.strip_prefix("fan")?.strip_suffix(INPUT_SUFFIX)?;
     let channel = digits.parse::<u32>().ok()?;
     (channel > 0).then_some(channel)
@@ -299,14 +348,14 @@ fn fan_input_channel(entry: &str) -> Option<u32> {
 /// explicit rather than being silently converted into RPM zero or absence.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case", tag = "kind")]
-pub enum SimulatedHwmonError {
+pub enum HwmonSourceError {
     Missing,
     PermissionDenied,
     DeviceDisappeared,
     ReadFailed { reason: String },
 }
 
-impl fmt::Display for SimulatedHwmonError {
+impl fmt::Display for HwmonSourceError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Missing => write!(f, "entry is absent"),
@@ -391,33 +440,29 @@ mod private {
 }
 
 impl SimulatedHwmonTree {
-    fn list_devices(&self) -> Result<Vec<String>, SimulatedHwmonError> {
+    fn list_devices(&self) -> Result<Vec<String>, HwmonSourceError> {
         Ok(self.devices.keys().cloned().collect())
     }
 
-    fn list_entries(&self, device_id: &str) -> Result<Vec<String>, SimulatedHwmonError> {
+    fn list_entries(&self, device_id: &str) -> Result<Vec<String>, HwmonSourceError> {
         let device = self
             .devices
             .get(device_id)
-            .ok_or(SimulatedHwmonError::Missing)?;
+            .ok_or(HwmonSourceError::Missing)?;
         Ok(device.entries.keys().cloned().collect())
     }
 
-    fn read_entry(&self, device_id: &str, entry: &str) -> Result<Vec<u8>, SimulatedHwmonError> {
+    fn read_entry(&self, device_id: &str, entry: &str) -> Result<Vec<u8>, HwmonSourceError> {
         let device = self
             .devices
             .get(device_id)
-            .ok_or(SimulatedHwmonError::Missing)?;
-        match device
-            .entries
-            .get(entry)
-            .ok_or(SimulatedHwmonError::Missing)?
-        {
+            .ok_or(HwmonSourceError::Missing)?;
+        match device.entries.get(entry).ok_or(HwmonSourceError::Missing)? {
             SimulatedHwmonEntry::Regular(value) => Ok(value.clone()),
-            SimulatedHwmonEntry::Missing => Err(SimulatedHwmonError::Missing),
-            SimulatedHwmonEntry::PermissionDenied => Err(SimulatedHwmonError::PermissionDenied),
-            SimulatedHwmonEntry::DeviceDisappeared => Err(SimulatedHwmonError::DeviceDisappeared),
-            SimulatedHwmonEntry::ReadFailed(reason) => Err(SimulatedHwmonError::ReadFailed {
+            SimulatedHwmonEntry::Missing => Err(HwmonSourceError::Missing),
+            SimulatedHwmonEntry::PermissionDenied => Err(HwmonSourceError::PermissionDenied),
+            SimulatedHwmonEntry::DeviceDisappeared => Err(HwmonSourceError::DeviceDisappeared),
+            SimulatedHwmonEntry::ReadFailed(reason) => Err(HwmonSourceError::ReadFailed {
                 reason: reason.clone(),
             }),
         }
@@ -426,11 +471,11 @@ impl SimulatedHwmonTree {
     fn classification(
         &self,
         device_id: &str,
-    ) -> Result<HwmonDriverClassification, SimulatedHwmonError> {
+    ) -> Result<HwmonDriverClassification, HwmonSourceError> {
         self.devices
             .get(device_id)
             .map(|device| device.classification)
-            .ok_or(SimulatedHwmonError::Missing)
+            .ok_or(HwmonSourceError::Missing)
     }
 
     fn root_label(&self) -> &str {
@@ -526,7 +571,7 @@ mod tests {
         assert!(matches!(
             permission,
             HwmonFanError::Source {
-                error: SimulatedHwmonError::PermissionDenied,
+                error: HwmonSourceError::PermissionDenied,
                 ..
             }
         ));
@@ -565,7 +610,7 @@ mod tests {
         assert!(matches!(
             disappearing,
             HwmonFanError::Source {
-                error: SimulatedHwmonError::DeviceDisappeared,
+                error: HwmonSourceError::DeviceDisappeared,
                 ..
             }
         ));
