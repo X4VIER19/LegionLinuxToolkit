@@ -27,6 +27,7 @@ use std::{
 };
 
 mod host_identity;
+mod hwmon;
 mod offline_fan_response;
 
 #[cfg(any(
@@ -53,6 +54,10 @@ mod dmi_identity;
 pub use host_identity::{
     HostIdentityField, HostIdentitySource, HostIdentitySourceError, LinuxHostIdentityError,
     LinuxHostIdentityProvider, SimulatedLinuxHostIdentitySource,
+};
+pub use hwmon::{
+    HwmonDriverClassification, HwmonFanError, HwmonFanQuery, HwmonFanReading, LinuxHwmonFanReader,
+    SimulatedHwmonDevice, SimulatedHwmonEntry, SimulatedHwmonTree,
 };
 pub use offline_fan_response::{
     OfflineFanResponseAnalysis, OfflineFanResponseError, OfflineFanResponseProvenance,

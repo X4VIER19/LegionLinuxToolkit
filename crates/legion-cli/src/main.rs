@@ -3,8 +3,9 @@ use legion_core::{
     WmiTransportError, parse_snapshot,
 };
 use legion_linux::{
-    LinuxPlatformProfileReader, PlatformProfileEntry, PlatformProfileQuery, SimulatedEntry,
-    SimulatedPlatformProfileTree,
+    HwmonFanQuery, LinuxHwmonFanReader, LinuxPlatformProfileReader, PlatformProfileEntry,
+    PlatformProfileQuery, SimulatedEntry, SimulatedHwmonDevice, SimulatedHwmonEntry,
+    SimulatedHwmonTree, SimulatedPlatformProfileTree,
 };
 use serde::Serialize;
 use std::{env, process::ExitCode};
@@ -58,7 +59,7 @@ fn run(args: Vec<String>) -> Result<String, String> {
     while index < args.len() {
         match args[index].as_str() {
             "summary" | "profiles" | "attributes" | "compatibility" | "telemetry" | "wmi"
-            | "platform-profile" => view = &args[index],
+            | "platform-profile" | "fan-rpm" => view = &args[index],
             "--format" => {
                 index += 1;
                 format = args.get(index).ok_or("--format requires text or json")?;
@@ -76,7 +77,7 @@ fn run(args: Vec<String>) -> Result<String, String> {
                 scenario = args.get(index).ok_or("--scenario requires a fixture name")?;
             }
             "--help" | "-h" => {
-                return Ok("Usage: legion-cli [summary|profiles|attributes] [--format text|json] [--fixture valid|missing|malformed]\n       legion-cli compatibility [--device known|unknown|incomplete] [--format text|json]\n       legion-cli telemetry [--scenario valid|absent|unvalidated|inconsistent|read-error] [--format text|json]\n       legion-cli platform-profile [--scenario valid|active-only|missing-active|empty-active|empty-choices|unknown|duplicate|inconsistent|malformed] [--format text|json]\n       legion-cli wmi [--scenario valid|unavailable|inconsistent-buffer|unsupported] [--format text|json]\nAll data is embedded and simulated.".into())
+                return Ok("Usage: legion-cli [summary|profiles|attributes] [--format text|json] [--fixture valid|missing|malformed]\n       legion-cli compatibility [--device known|unknown|incomplete] [--format text|json]\n       legion-cli telemetry [--scenario valid|absent|unvalidated|inconsistent|read-error] [--format text|json]\n       legion-cli platform-profile [--scenario valid|active-only|missing-active|empty-active|empty-choices|unknown|duplicate|inconsistent|malformed] [--format text|json]\n       legion-cli fan-rpm [--scenario quirk-two-channel|one-channel|zero-generic|read-error|duplicate-source|device-disappeared|missing-device|invalid-rpm] [--format text|json]\n       legion-cli wmi [--scenario valid|unavailable|inconsistent-buffer|unsupported] [--format text|json]\nAll data is embedded and simulated; fan-rpm never opens host hwmon paths.".into())
             }
             other => return Err(format!("unsupported argument: {other}")),
         }
@@ -97,6 +98,9 @@ fn run(args: Vec<String>) -> Result<String, String> {
     if view == "platform-profile" {
         return platform_profile(scenario, format);
     }
+    if view == "fan-rpm" {
+        return fan_rpm(scenario, format);
+    }
     let input = legion_fixtures::named(fixture)
         .ok_or_else(|| format!("unknown simulated fixture: {fixture}"))?;
     let snapshot = parse_snapshot(input).map_err(|error| error.to_string())?;
@@ -111,6 +115,98 @@ fn run(args: Vec<String>) -> Result<String, String> {
         }),
         ("attributes", "json") => json(&snapshot.attributes),
         _ => unreachable!(),
+    }
+}
+
+/// `fan-rpm` intentionally creates only an in-memory hwmon-shaped tree. The
+/// closed scenario set gives this CLI no path, environment, or fallback route
+/// to `/sys/class/hwmon`.
+fn fan_rpm(scenario: &str, format: &str) -> Result<String, String> {
+    let tree = simulated_hwmon_scenario(scenario)
+        .ok_or_else(|| format!("unknown simulated fan-rpm scenario: {scenario}"))?;
+    let readings = LinuxHwmonFanReader::new(tree)
+        .read_once()
+        .map_err(|error| format!("simulated hwmon fan query failed: {error}"))?;
+    match format {
+        "json" => json(&readings),
+        "text" => Ok(text_fan_rpm(&readings)),
+        _ => unreachable!(),
+    }
+}
+
+fn simulated_hwmon_scenario(scenario: &str) -> Option<SimulatedHwmonTree> {
+    let valid_quirk = || {
+        SimulatedHwmonTree::new("legion-cli-embedded-hwmon").with_device(
+            "simulated-yogafan-83ex",
+            SimulatedHwmonDevice::validated_83ex_quirk(b"yogafan\n".to_vec())
+                .with_entry(
+                    "fan1_input",
+                    SimulatedHwmonEntry::Regular(b"1900\n".to_vec()),
+                )
+                .with_entry(
+                    "fan2_input",
+                    SimulatedHwmonEntry::Regular(b"1900\n".to_vec()),
+                ),
+        )
+    };
+    match scenario {
+        "quirk-two-channel" => Some(valid_quirk()),
+        "one-channel" => Some(
+            SimulatedHwmonTree::new("legion-cli-one-channel").with_device(
+                "simulated-acpi-fan",
+                SimulatedHwmonDevice::generic(b"acpi_fan\n".to_vec()).with_entry(
+                    "fan1_input",
+                    SimulatedHwmonEntry::Regular(b"1900\n".to_vec()),
+                ),
+            ),
+        ),
+        "zero-generic" => Some(
+            SimulatedHwmonTree::new("legion-cli-zero").with_device(
+                "simulated-original-yogafan",
+                SimulatedHwmonDevice::generic(b"yogafan\n".to_vec())
+                    .with_entry("fan1_input", SimulatedHwmonEntry::Regular(b"0\n".to_vec())),
+            ),
+        ),
+        "read-error" => Some(
+            SimulatedHwmonTree::new("legion-cli-error").with_device(
+                "simulated-acpi-fan",
+                SimulatedHwmonDevice::generic(b"acpi_fan\n".to_vec())
+                    .with_entry("fan1_input", SimulatedHwmonEntry::PermissionDenied),
+            ),
+        ),
+        "duplicate-source" => Some(
+            SimulatedHwmonTree::new("legion-cli-duplicate")
+                .with_device(
+                    "simulated-a",
+                    SimulatedHwmonDevice::generic(b"acpi_fan\n".to_vec()).with_entry(
+                        "fan1_input",
+                        SimulatedHwmonEntry::Regular(b"1900\n".to_vec()),
+                    ),
+                )
+                .with_device(
+                    "simulated-b",
+                    SimulatedHwmonDevice::generic(b"acpi_fan\n".to_vec()).with_entry(
+                        "fan1_input",
+                        SimulatedHwmonEntry::Regular(b"1900\n".to_vec()),
+                    ),
+                ),
+        ),
+        "device-disappeared" => Some(
+            SimulatedHwmonTree::new("legion-cli-disappeared").with_device(
+                "simulated-acpi-fan",
+                SimulatedHwmonDevice::generic(b"acpi_fan\n".to_vec())
+                    .with_entry("fan1_input", SimulatedHwmonEntry::DeviceDisappeared),
+            ),
+        ),
+        "missing-device" => Some(SimulatedHwmonTree::new("legion-cli-empty")),
+        "invalid-rpm" => Some(SimulatedHwmonTree::new("legion-cli-invalid").with_device(
+            "simulated-acpi-fan",
+            SimulatedHwmonDevice::generic(b"acpi_fan\n".to_vec()).with_entry(
+                "fan1_input",
+                SimulatedHwmonEntry::Regular(b"not-a-number\n".to_vec()),
+            ),
+        )),
+        _ => None,
     }
 }
 
@@ -324,6 +420,34 @@ fn text_platform_profile(reading: &PlatformProfileReading) -> String {
         reading.state.as_str(),
         reading.provenance.source,
         reading.provenance.confidence.as_str(),
+    )
+}
+
+fn text_fan_rpm(readings: &[legion_linux::HwmonFanReading]) -> String {
+    let rendered = readings
+        .iter()
+        .map(|reading| {
+            let zero_note = (reading.rpm.value == Some(0)
+                && reading.interpretation == legion_core::FanInterpretation::NonConclusive)
+                .then_some("; zero does not establish a stopped fan")
+                .unwrap_or("");
+            format!(
+                "- driver={} channel=fan{}_input value={} RPM [source={:?}; validation={:?}; interpretation={:?}; provenance={} ({}){}]",
+                reading.driver_name,
+                reading.channel,
+                reading.rpm.value.map_or_else(|| "<none>".to_owned(), |value| value.to_string()),
+                reading.source_classification,
+                reading.validation,
+                reading.interpretation,
+                reading.rpm.provenance.source,
+                reading.rpm.provenance.confidence.as_str(),
+                zero_note,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "Fan RPM diagnostic — simulated hwmon only\n{rendered}\nChannels are not assigned to CPU or GPU. No host hwmon path, firmware, or fan control was accessed."
     )
 }
 
@@ -542,6 +666,50 @@ mod tests {
 
         let path = run(vec!["telemetry".into(), "--scenario".into(), "/sys".into()]).unwrap_err();
         assert!(path.contains("unknown simulated telemetry scenario"));
+    }
+
+    #[test]
+    fn reports_only_simulated_hwmon_quirk_data() {
+        let output = run(vec![
+            "fan-rpm".into(),
+            "--scenario".into(),
+            "quirk-two-channel".into(),
+            "--format".into(),
+            "json".into(),
+        ])
+        .unwrap();
+        let decoded: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(decoded["source"], "simulated");
+        assert_eq!(decoded["data"].as_array().unwrap().len(), 2);
+        assert_eq!(decoded["data"][0]["rpm"]["value"], 1900);
+        assert_eq!(
+            decoded["data"][0]["rpm"]["provenance"]["artifact"],
+            "static-simulation"
+        );
+        assert_eq!(
+            decoded["data"][0]["source_classification"],
+            "validated-83ex-quirk-simulation"
+        );
+    }
+
+    #[test]
+    fn does_not_promote_generic_yogafan_zero_or_paths() {
+        let output = run(vec![
+            "fan-rpm".into(),
+            "--scenario".into(),
+            "zero-generic".into(),
+        ])
+        .unwrap();
+        assert!(output.contains("zero does not establish a stopped fan"));
+        assert!(output.contains("GenericUnvalidated"));
+
+        let path = run(vec![
+            "fan-rpm".into(),
+            "--scenario".into(),
+            "/sys/class/hwmon".into(),
+        ])
+        .unwrap_err();
+        assert!(path.contains("unknown simulated fan-rpm scenario"));
     }
 
     #[test]
