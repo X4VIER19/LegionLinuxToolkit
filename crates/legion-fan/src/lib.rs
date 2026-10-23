@@ -13,6 +13,7 @@ use legion_core::{
 use serde::Serialize;
 use std::{collections::BTreeSet, fmt};
 
+mod curve_catalog;
 mod fan_get_table;
 mod fan_get_table_abi;
 mod kernel_contract;
@@ -20,6 +21,11 @@ mod kernel_endpoint;
 mod wmi_adapter;
 mod wmi_schema;
 
+pub use curve_catalog::{
+    AML_CURVE_SCALE_DIVISOR, AML_CURVE_VALUE_OFFSET, AmlCatalogueError, AmlCatalogueValue,
+    AmlFanCurveCatalogues, FntProfileSelection, IndexedCurveValue, InterpretedFanGetTableIndices,
+    PhysicalInterpretation, interpret_fat2_curve_indices, parse_aml_fan_curve_catalogues,
+};
 pub use fan_get_table::{
     FanGetTableEvidence, FanGetTableEvidenceParser, FanGetTableParseError, FanTableEvidence,
     OpaqueFanTableField, ParsedFanGetTable, documented_windows_table_evidence,
