@@ -93,6 +93,114 @@ o apagado. Descargar nuestro módulo no revierte registros EC.
 - Confirmación específica, registro de operación y aprobación independiente
   para firmware/modelo/BIOS y prueba concreta.
 
-Bloqueo actual: no existe recuperación garantizada ni semántica térmica
-suficiente. Ninguna validación offline autoriza una primera escritura.
-Fan_Set_Table, transporte de escritura y controles CLI permanecen ausentes.
+La evaluación inicial no acreditó recuperación ante fallos parciales.
+El transporte de preparación añadido posteriormente permanece bloqueado;
+la decisión actual y la evidencia pendiente se precisan a continuación.
+
+## Resolución concentrada: selector, catálogos y recuperación
+
+Esta sección actualiza las conclusiones iniciales anteriores; el transporte de
+preparación ya existe, pero conserva su barrera constante `false`. Fuente:
+análisis offline del DSDT local, sin ejecutar AML ni leer el host.
+
+### Selector 1 no significa FNT1 ni Personalizado
+
+`SFAN` (35119–35296) selecciona primero el catálogo, después el paquete:
+
+| Condición | Catálogo | Paquete con F000=1 | Parámetros auxiliares |
+|---|---|---|---|
+| PMID=1, PGID=2 o 3 | FNT2 | 6 | FI0C |
+| PMID=1, PGID=5 | FNT4 | 6 | FI16 |
+| PMID=1, otro PGID | FNT3 | 6 | FI11 |
+| PMID!=1, DCID=0 | FNT1 | 6 | FI07 |
+| PMID!=1, DCID!=0 | FNT0 | 6 | FI02 |
+
+El fragmento común es `If (F000 == One) { Local0 = DerefOf
+(Local1 [0x06]); CopyObject (FIxx, Local2) }`. GZ44 no participa en esta
+selección: WMAB solo excluye GZ44=7. Personalizado/GZ44=3 no transforma el
+selector 1 en FF. PMID/PGID/DCID están declarados en OGNS/SystemMemory
+(536–550); no son los tres registros EC que hay que leer directamente.
+No se encontró asignación explícita a estos tres campos en este DSDT;
+su inicialización externa y valores actuales no quedan demostrados.
+
+Con índices 1..10, CRP/GRP/ERP reciben `Local0[indice+2]/100`:
+
+| Catálogo, paquete 6 | Diez valores escritos a cada grupo |
+|---|---|
+| FNT0 | 0,17,19,21,24,29,32,35,38,50 |
+| FNT1 | 0,18,21,22,26,30,33,36,42,48 |
+| FNT2 | 0,14,17,19,22,25,29,35,43,58 |
+| FNT3 / FNT4 | 0,14,17,19,22,25,31,35,48,48 |
+
+Son resultados matemáticos, no nuevas mediciones RPM. FI aporta además
+66 valores (tres paquetes de 22), que difieren entre FI02, FI07 y FI0C;
+FI0C/FI11/FI16 coinciden en la evidencia local. No basta comparar índices.
+
+Los paquetes 9/10/11 de FNT0 tienen Mode=255 y coordenadas (1,4), (2,5),
+(1,1), con los diez niveles nominales comunicados desde Windows. Entre los
+cinco catálogos examinados, solo FNT0 reproduce esa secuencia. Es evidencia
+histórica fuerte de la rama FNT0 (PMID!=1 y DCID!=0), no una captura actual
+de esos campos en Linux. Paquete 6 y paquetes 9..11 de FNT0 comparten niveles,
+pero no todos los parámetros: SFAN con selector 1 usa FI02, no FI03.
+
+Los diez índices oficiales caben en los paquetes y campos EC de 8 bits;
+el cero resultante en el primer escalón es intencional en esa tabla y no
+significa ausencia de datos. AML no impone los límites LLT, monotonía,
+selector válido, tamaño completo ni ausencia de concurrencia.
+
+### Reaplicar no es rollback
+
+SFAN escribe 107 destinos EC distintos: 10 índices, 30 CRP/GRP/ERP,
+66 parámetros FI y CMRD. Reaplicar el mismo payload completa esos mismos
+destinos si termina y la selección no cambia; no restaura un estado previo
+desconocido. Entre selección y finalización tampoco hay exclusión visible
+del firmware: SFAN es NotSerialized.
+
+Una comparación offline de asignaciones demuestra que SFA2+INIF cubre
+esos mismos 107 destinos, no solo una parte. Sin embargo, genera otros valores:
+INIF(1) llama SFTW(6), usa SOU3 y satura los índices. En FNT0[6], SOU3=5:
+produce [1,2,3,4,5,5,5,5,5,5], no [1..10]. Además, en la rama Arg0=4 de
+FNT0/FNT1, SFA2 selecciona paquete 12 mientras INIF selecciona 9. Cobertura
+de destinos no equivale a equivalencia de configuración ni a rollback.
+
+CMRD es un campo de un bit (13268); sus únicas referencias nominales en
+este DSDT son la declaración y las dos asignaciones finales a 1. No hay
+limpieza previa, espera, lectura de aceptación ni manejo de error. Si SFAN
+falla antes de ese punto, quedan potencialmente escritos los destinos previos;
+CMRD incluso podría estar ya a 1. No puede inferirse que el EC descarte o
+aplique atómicamente una escritura parcial. Falta la implementación interna EC.
+
+SFA2 aparece en WMAE/GetFeatureValue (39978–39989), condicionado por cambio
+de categoría TPC1 tras inicializar TPC0; no es una restauración garantizada
+por Fn+Q. GFAN también llama INIF(2) si F10A=0 (35049–35065): un readback
+no debe utilizarse como comprobación universal sin efectos secundarios.
+
+### Decisión y evidencia mínima pendiente
+
+El protocolo y el preset permiten diseñar una prueba acotada; no existe aún
+evidencia actual suficiente para ejecutarla. La vía más corta para resolver
+el selector efectivo es capturar, bajo autorización aparte, el FACT completo
+del catálogo activo mediante WQA7/SFTW, índices 6 y 9..11, y contrastarlo con
+FNT0. WQA7 (38346–38348) solo llama SFTW, que construye FACT sin escrituras
+EC visibles; sigue siendo una invocación activa que requiere revisión y permiso.
+No hace falta acceso directo a OGNS/EC si ese testigo identifica la rama;
+no demuestra que el firmware no la cambie concurrentemente.
+
+Justo antes de una eventual prueba: identidad/BIOS exactos, AC estable,
+Personalizado/GZ44=3, FanFullSpeed=0 reciente, catálogo acreditado, ausencia
+de cambios concurrentes, dos RPM fiables y supervisión térmica independiente
+con límites y actuación de aborto aprobados. Ninguna observación histórica
+sustituye esos estados. Falta completar esa comprobación y el protocolo térmico;
+no se exige demostrar un rollback imposible desde este AML.
+
+La eventual prueba sería una sola aplicación del preset, sin reintentos,
+cargas forzadas ni cambio automático de modo; abortar antes de invocar ante
+datos desconocidos o supervisión fallida. Tras un fallo ambiguo no repetir.
+Integer(0), GFAN coincidente y RPM normales no prueban todos los destinos.
+Ante anomalía térmica, detener la actividad y aplicar el protocolo de apagado
+aprobado, no intentar arreglos EC. Windows/LLT disponible, Personalizado,
+FanFullSpeed desactivado y Predefinido → Guardar es una vía operacional ya
+probada dos veces según el propietario, pero no garantiza recuperación de
+una ejecución parcial, fallo EC o equipo que ya no arranque. Fn+Q, reinicio
+y descarga del módulo tampoco la garantizan. Una primera escritura requerirá
+aceptación explícita de ese riesgo residual y autorización específica.
