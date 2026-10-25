@@ -1,4 +1,4 @@
-//! Private live acquisition for the bounded rehearsal; no writer/module loader.
+//! Shared live acquisition; staged writer remains constant-false gated.
 use super::*;
 use crate::{ApprovedRealReadActivation, PlatformProfileQuery, SysfsPlatformProfileProvider};
 use legion_core::{
@@ -193,7 +193,83 @@ pub fn run_live_rehearsal(
     confirmation: &str,
     idle_attested: bool,
 ) -> Result<RehearsalResult, String> {
-    if confirmation != CONFIRM || !idle_attested {
+    run_live(registry, confirmation, idle_attested, false)
+}
+
+/// Second independent, non-configurable barrier. No host acquisition occurs
+/// through this entry point until a separately reviewed activation diff.
+pub fn run_staged_default_trial(
+    registry: &CompatibilityRegistry,
+    confirmation: &str,
+    idle_attested: bool,
+) -> Result<RehearsalResult, String> {
+    const EXECUTION_AUTHORIZED: bool = false;
+    if !EXECUTION_AUTHORIZED {
+        return Err("default-preset execution blocked by constant false; no host access".into());
+    }
+    run_live(registry, confirmation, idle_attested, true)
+}
+
+fn dispatch_default_preset() -> Result<PresetReply, String> {
+    use rustix::fs::{CWD, FileType, Mode, OFlags, ResolveFlags, fstat, openat2};
+    static ATTEMPTED: AtomicBool = AtomicBool::new(false);
+    ATTEMPTED
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .map_err(|_| "preset dispatch already consumed; no retry")?;
+    let payload = legion_fan::control_payload::OfflineCurveProposal::default_curve(
+        legion_fan::control_payload::CurveRules::DeclaredLltV2ToV4,
+    )
+    .map_err(|e| format!("default preset: {e:?}"))?
+    .payload();
+    let queued_at = Instant::now();
+    let (tx, rx) = mpsc::channel();
+    thread::Builder::new()
+        .name("one-preset-attempt".into())
+        .spawn(move || {
+            let result = (|| {
+                let fd = openat2(
+                    CWD,
+                    "/dev/legion-fan-default-preset-experimental",
+                    OFlags::WRONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW | OFlags::NONBLOCK,
+                    Mode::empty(),
+                    ResolveFlags::NO_SYMLINKS | ResolveFlags::NO_MAGICLINKS,
+                )
+                .map_err(|e| format!("preset open: {e}"))?;
+                if FileType::from_raw_mode(fstat(&fd).map_err(|e| e.to_string())?.st_mode)
+                    != FileType::CharacterDevice
+                {
+                    return Err("preset endpoint is not a character device".into());
+                }
+                if queued_at.elapsed() > Duration::from_millis(1000) {
+                    return Err("preset dispatch delayed; stale evidence; no retry".into());
+                }
+                // Exactly ONE syscall: short writes, EINTR and ambiguous errors
+                // are terminal. Never write_all, retry or resend.
+                let count = rustix::io::write(&fd, &payload)
+                    .map_err(|e| format!("preset write: {e}; outcome may be partial; no retry"))?;
+                if count != payload.len() {
+                    return Err("short preset write; no retry".into());
+                }
+                Ok(())
+            })();
+            let _ = tx.send(result);
+        })
+        .map_err(|e| e.to_string())?;
+    Ok(rx)
+}
+
+fn run_live(
+    registry: &CompatibilityRegistry,
+    confirmation: &str,
+    idle_attested: bool,
+    staged: bool,
+) -> Result<RehearsalResult, String> {
+    let expected = if staged {
+        "I-AUTHORIZE-ONE-DEFAULT-83EX-FAN-PRESET"
+    } else {
+        CONFIRM
+    };
+    if confirmation != expected || !idle_attested {
         return Err(
             "exact read-only supervision confirmation and explicit idle attestation required"
                 .into(),
@@ -203,7 +279,7 @@ pub fn run_live_rehearsal(
         .map_err(|_| "one supervision run per process")?;
     let (path, mut file) = journal()?;
     eprintln!(
-        "LIVE READ-ONLY REHEARSAL / NO WRITE; durable journal: {}",
+        "Bounded supervision (staged={staged}); durable journal: {}",
         path.display()
     );
     let (request_tx, request_rx) = mpsc::channel();
@@ -222,24 +298,55 @@ pub fn run_live_rehearsal(
         }
     });
     let start = Instant::now();
+    let attempted = std::cell::Cell::new(false);
+    let mut dispatch = || {
+        attempted.set(true);
+        dispatch_default_preset()
+    };
     let result = supervise(
         registry,
-        "bounded-linux-read-only-no-write-rehearsal",
+        if staged {
+            "linux-experimental-default-preset-trial"
+        } else {
+            "bounded-linux-read-only-no-write-rehearsal"
+        },
         |boundary| {
             request_tx.send(boundary).map_err(|e| e.to_string())?;
-            reply_rx
+            let mut frame = reply_rx
                 .recv_timeout(Duration::from_millis(3000))
-                .map_err(|e| format!("acquisition watchdog: {e}; no retry"))?
+                .map_err(|e| format!("acquisition watchdog: {e}; no retry"))??;
+            if staged {
+                frame.source = "linux-experimental-default-preset-trial";
+            }
+            Ok(frame)
         },
         || start.elapsed().as_millis() as u64,
         |delay| thread::sleep(Duration::from_millis(delay)),
         |value| persist(&mut file, value),
+        if staged { Some(&mut dispatch) } else { None },
     );
     drop(request_tx);
     finish(
         path,
         &mut file,
         result,
-        "bounded-linux-read-only-no-write-rehearsal",
+        if staged {
+            "linux-experimental-default-preset-trial"
+        } else {
+            "bounded-linux-read-only-no-write-rehearsal"
+        },
+        attempted.get(),
     )
+}
+
+#[cfg(test)]
+mod staged_tests {
+    #[test]
+    fn execution_barrier_precedes_every_host_operation() {
+        let registry = legion_fixtures::legion_slim_5_16arp9_registry();
+        for confirmation in ["", "I-AUTHORIZE-ONE-DEFAULT-83EX-FAN-PRESET"] {
+            let error = super::run_staged_default_trial(&registry, confirmation, true).unwrap_err();
+            assert!(error.contains("constant false; no host access"));
+        }
+    }
 }

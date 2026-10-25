@@ -9,6 +9,10 @@ fn run(args: &[String]) -> Result<String, String> {
         [mode,flag,literal,idle] if mode=="--live-no-write-rehearsal" && flag=="--confirm" && idle=="--attest-idle" => {
             legion_linux::trial_monitor::run_live_rehearsal(&registry,literal,true)
         }
+        #[cfg(feature="experimental-fan-trial-monitor")]
+        [mode,flag,literal,idle] if mode=="--staged-default-trial" && flag=="--confirm" && idle=="--attest-idle" => {
+            legion_linux::trial_monitor::run_staged_default_trial(&registry,literal,true)
+        }
         _=>return Err("usage: --simulate OR (explicit experimental feature) --live-no-write-rehearsal --confirm I-AUTHORIZE-READ-ONLY-180S-83EX-SUPERVISION --attest-idle; no paths, modules, writes or indefinite monitoring".into()),
     }?;
     serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
@@ -20,7 +24,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
-            eprintln!("NO-WRITE supervision stopped: {error}");
+            eprintln!("Supervision stopped: {error}");
             ExitCode::from(2)
         }
     }

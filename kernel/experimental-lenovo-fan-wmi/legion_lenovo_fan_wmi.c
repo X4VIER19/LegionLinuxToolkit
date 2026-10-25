@@ -2,10 +2,9 @@
 /*
  * Deliberately disabled Lenovo Legion fan WMI skeleton.
  *
- * This file is not registered as a wmi_driver. Its inert probe and remove
- * callbacks exist only to validate the kernel API shape and never evaluate
- * firmware. Its init and exit functions manage only the experimental
- * read-only miscdevice.
+ * Passive WMI binding; probe/remove/init/exit never evaluate firmware.
+ * The optional staged preset endpoint is blocked by constant false. No
+ * load-time parameter can enable the firmware write.
  *
  * It records evidence specific to Lenovo Legion Slim 5 16ARP9 (83EX), BIOS
  * NUCN15WW. It is not evidence of compatibility with another model or BIOS.
@@ -23,6 +22,7 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/unaligned.h>
+#include <linux/jiffies.h>
 #include <linux/wmi.h>
 
 #include "legion_fan_read_contract.h"
@@ -64,7 +64,7 @@ static_assert(sizeof(struct legion_fan_get_table_fat2) ==
  */
 /* Local exclusion only: it is not the native driver's transaction lock. */
 static DEFINE_MUTEX(legion_fan_wmi_lock);
-#if !IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ) && !IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FACT_READ)
+#if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI_CONTROL_STAGING) || (!IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ) && !IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FACT_READ))
 static const struct wmi_device_id legion_fan_wmi_id_table[] = {
 	{ .guid_string = LENOVO_FAN_WMI_GUID },
 	{}
@@ -111,16 +111,20 @@ static struct wmi_driver legion_fan_wmi_driver = {
 #endif /* FanFullSpeed mode never registers or owns a WMI driver. */
 
 #if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI_CONTROL_STAGING)
-/* No setter, module parameter, endpoint or caller exists for this barrier.
+/* No setter or module parameter exists for this barrier.
  * Enabling it requires a new reviewed code change, not a load-time argument.
  */
 static const bool legion_control_execution_authorized = false;
 static atomic_t legion_control_attempted = ATOMIC_INIT(0);
+static bool legion_control_full_speed_disabled;
+static unsigned long legion_control_full_speed_at;
+static char *control_confirmation;
+module_param(control_confirmation, charp, 0400);
 
-/* Metadata must eventually come from independently validated observation;
- * caller assertions alone must never authorize execution. Currently uncalled.
+/* Userspace envelope checks do not establish an atomic firmware transaction.
+ * Activating this barrier requires review of the complete supervisor path.
  */
-static int __maybe_unused legion_fan_default_control_staged(
+static int legion_fan_default_control_staged(
  const u8 *payload, size_t size, int gz44, int full_speed)
 {
  struct acpi_buffer input = { .length = 64, .pointer = (void *)payload };
@@ -129,8 +133,6 @@ static int __maybe_unused legion_fan_default_control_staged(
  acpi_status status;
  int error = 0;
 
- if (!legion_control_execution_authorized)
-  return -EOPNOTSUPP;
  error = legion_control_policy(payload, size,
   dmi_match(DMI_SYS_VENDOR, "LENOVO") &&
   dmi_match(DMI_PRODUCT_NAME, "83EX") &&
@@ -140,7 +142,16 @@ static int __maybe_unused legion_fan_default_control_staged(
   return error;
  if (atomic_cmpxchg(&legion_control_attempted, 0, 1))
   return -EALREADY;
+ /* Consume even the blocked attempt. No runtime argument can lift false. */
+ if (!legion_control_execution_authorized)
+  return -EOPNOTSUPP;
  mutex_lock(&legion_fan_wmi_lock);
+ if (!legion_control_full_speed_disabled ||
+     time_after(jiffies, legion_control_full_speed_at + msecs_to_jiffies(3000))) {
+  error = -ESTALE;
+  goto unlock_control;
+ }
+ legion_control_full_speed_disabled = false;
  if (!legion_fan_wmi_device) {
   error = -ENODEV;
   goto unlock_control;
@@ -163,6 +174,38 @@ unlock_control:
  mutex_unlock(&legion_fan_wmi_lock);
  return error;
 }
+
+/* Private root-only fixed-preset endpoint. Profile/AC/thermal evidence is
+ * checked by the supervisor immediately before dispatch, NOT asserted by this
+ * kernel API. The permanent false barrier must not be removed in isolation.
+ */
+static ssize_t legion_control_write(struct file *file, const char __user *buffer,
+                                   size_t count, loff_t *offset)
+{
+ u8 payload[64];
+ int error;
+ (void)file;
+ if (count != sizeof(payload) || *offset)
+  return -EINVAL;
+ if (!control_confirmation || strcmp(control_confirmation,
+     "I-AUTHORIZE-ONE-DEFAULT-83EX-FAN-PRESET"))
+  return -EPERM;
+ if (copy_from_user(payload, buffer, sizeof(payload)))
+  return -EFAULT;
+ /* gz44=3 here is the userspace custom-profile precondition, not an EC read. */
+ error = legion_fan_default_control_staged(payload, sizeof(payload), 3, 0);
+ if (error)
+  return error;
+ *offset += sizeof(payload);
+ return sizeof(payload);
+}
+static const struct file_operations legion_control_fops = {
+ .owner = THIS_MODULE, .open = nonseekable_open, .write = legion_control_write,
+};
+static struct miscdevice legion_control_endpoint = {
+ .minor = MISC_DYNAMIC_MINOR, .name = "legion-fan-default-preset-experimental",
+ .fops = &legion_control_fops, .mode = 0200,
+};
 #endif
 
 #if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI_REAL_READ)
@@ -388,6 +431,12 @@ static ssize_t legion_full_speed_read(struct file *file, char __user *buffer,
 	*offset = sizeof(response);
 	mutex_lock(&legion_fan_wmi_lock);
 	legion_full_speed_evaluate(&response);
+#if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI_CONTROL_STAGING)
+	legion_control_full_speed_disabled =
+		le32_to_cpu(response.status) == LEGION_FAN_READ_OK &&
+		le32_to_cpu(response.payload_size) == 8 && !le64_to_cpu(response.value);
+	legion_control_full_speed_at = jiffies;
+#endif
 	mutex_unlock(&legion_fan_wmi_lock);
 	if (copy_to_user(buffer, &response, sizeof(response)))
 		return -EFAULT;
@@ -437,11 +486,32 @@ static int __init legion_fan_endpoint_init(void)
 	}
 #endif
 
+#if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI_CONTROL_STAGING)
+	error = wmi_driver_register(&legion_fan_wmi_driver);
+	if (error)
+		goto remove_full_speed;
+	error = misc_register(&legion_control_endpoint);
+	if (error) {
+		wmi_driver_unregister(&legion_fan_wmi_driver);
+		goto remove_full_speed;
+	}
+#endif
+
 	return error;
+#if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI_CONTROL_STAGING)
+remove_full_speed:
+	misc_deregister(&legion_full_speed_endpoint);
+	misc_deregister(&legion_fan_endpoint);
+	return error;
+#endif
 }
 
 static void __exit legion_fan_endpoint_exit(void)
 {
+#if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI_CONTROL_STAGING)
+	misc_deregister(&legion_control_endpoint);
+	wmi_driver_unregister(&legion_fan_wmi_driver);
+#endif
 #if !IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ) && !IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FACT_READ)
 	wmi_driver_unregister(&legion_fan_wmi_driver);
 #endif

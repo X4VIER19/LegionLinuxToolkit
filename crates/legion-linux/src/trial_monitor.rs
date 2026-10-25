@@ -1,5 +1,5 @@
-//! Bounded NO-WRITE supervision rehearsal. No method 6, writer, module loader,
-//! automatic profile change, shutdown, host path option or background service.
+//! Bounded supervision, no-write by default. The staged preset caller has an
+//! independent constant-false barrier; no module loader or profile setter.
 use legion_core::{
     CompatibilityRegistry, FanTelemetry, HostIdentity, PlatformProfileReading, TelemetryValue,
 };
@@ -19,6 +19,10 @@ use std::{
 mod live;
 #[cfg(feature = "experimental-fan-trial-monitor")]
 pub use live::run_live_rehearsal;
+#[cfg(feature = "experimental-fan-trial-monitor")]
+pub use live::run_staged_default_trial;
+
+type PresetReply = std::sync::mpsc::Receiver<Result<(), String>>;
 
 #[derive(Serialize)]
 struct Frame {
@@ -91,10 +95,16 @@ fn supervise(
     mut now: impl FnMut() -> u64,
     mut wait: impl FnMut(u64),
     mut journal: impl FnMut(&serde_json::Value) -> Result<(), String>,
+    mut preset: Option<&mut dyn FnMut() -> Result<PresetReply, String>>,
 ) -> Result<(), String> {
+    let staged = preset.is_some();
+    let dispatch_attempted = std::cell::Cell::new(false);
     let mut log = |value: &serde_json::Value| {
         let mut value = value.clone();
         value["source"] = serde_json::json!(origin);
+        value["write_attempted"] = serde_json::json!(dispatch_attempted.get());
+        value["execution_enabled"] =
+            serde_json::json!(staged && origin == "linux-experimental-default-preset-trial");
         journal(&value)
     };
     let started = now();
@@ -104,8 +114,15 @@ fn supervise(
     let mut fingerprint = None;
     let mut cpu_minimum = f64::INFINITY;
     let mut gpu_minimum = f64::INFINITY;
+    let mut preset_reply = None;
+    let mut preset_result = None;
+    let mut post_anomaly = false;
     log(&event(
-        "start-no-write-rehearsal",
+        if preset.is_some() {
+            "start-staged-default-trial"
+        } else {
+            "start-no-write-rehearsal"
+        },
         0,
         serde_json::json!({"baseline_seconds":60,"post_marker_seconds":120,"cadence_ms":1000,"idle":"operator-attested-not-measured","FullSpeed":"single-query-at-boundary-not-continuously-refreshed"}),
     ))?;
@@ -113,7 +130,11 @@ fn supervise(
         let context = if index <= 60 {
             "cancel-before-write"
         } else {
-            "post-no-write-marker-anomaly; not-SFAN-rollback"
+            if staged {
+                "post-preset-dispatch-anomaly; cannot-rollback-SFAN"
+            } else {
+                "post-no-write-marker-anomaly; not-SFAN-rollback"
+            }
         };
         let due = if index > 60 {
             post_anchor.ok_or("no durable no-write marker")? + (index as u64 - 60) * 1000
@@ -135,8 +156,19 @@ fn supervise(
             index,
             serde_json::json!({"phase":context,"FullSpeed_query_requested":index==60}),
         ))?;
-        let frame =
-            acquire(index == 60).map_err(|error| format!("{context}, sample {index}: {error}"))?;
+        let frame = match acquire(index == 60) {
+            Ok(frame) => frame,
+            Err(error) if dispatch_attempted.get() => {
+                post_anomaly = true;
+                log(&event(
+                    "post-acquisition-error",
+                    index,
+                    serde_json::json!({"error":error,"no_cached_value":true}),
+                ))?;
+                continue;
+            }
+            Err(error) => return Err(format!("{context}, sample {index}: {error}")),
+        };
         if !matches!(
             crate::fan_control_transport::control_identity_match(registry, &frame.identity),
             legion_core::MatchResult::Exact { .. }
@@ -187,11 +219,15 @@ fn supervise(
             if index <= 60 {
                 "baseline-sample"
             } else {
-                "post-no-write-marker-sample"
+                if staged {
+                    "post-preset-dispatch-sample"
+                } else {
+                    "post-no-write-marker-sample"
+                }
             },
             index,
             serde_json::json!({"source":frame.source,"elapsed_ms":done-started,"acquisition_ms":duration,
-                "readings":frame,"policy":assessment,"actual_SFAN_attempt":false,
+                "readings":frame,"policy":assessment,"preset_endpoint_attempted":dispatch_attempted.get(),
                 "FullSpeed_current":index==60}),
         ))?;
         let good = matches!(
@@ -202,13 +238,21 @@ fn supervise(
         if index == 0 {
             baseline_anchor = done;
         }
-        if !good {
+        if !good && staged && index > 60 {
+            // Detection after dispatch cannot cancel or roll back SFAN.
+            // Keep observing the remaining POST window; fail the final result.
+            post_anomaly = true;
+        } else if !good {
             return Err(format!(
                 "{}: {:?}",
                 if index <= 60 {
                     "cancel-before-any-write"
                 } else {
-                    "post-marker-anomaly-no-write-occurred; cannot-rollback-SFAN"
+                    if staged {
+                        "post-preset-anomaly; cannot-rollback-SFAN"
+                    } else {
+                        "post-marker-anomaly-no-write-occurred; cannot-rollback-SFAN"
+                    }
                 },
                 assessment.reasons
             ));
@@ -257,17 +301,72 @@ fn supervise(
                 index,
                 serde_json::to_value(report).map_err(|e| e.to_string())?,
             ))?;
+            if let Some(dispatch) = preset.as_mut() {
+                // Persist intent BEFORE dispatch. A lost reply is ambiguous,
+                // never proof that firmware was not called; never retry.
+                log(&event(
+                    "preset-dispatch-intent",
+                    index,
+                    serde_json::json!({"preset":"1..10","response_is_not_EC_acceptance":true}),
+                ))?;
+                if now().saturating_sub(begin) > 3000 {
+                    return Err("boundary evidence stale before preset dispatch".into());
+                }
+                dispatch_attempted.set(true);
+                match dispatch() {
+                    Ok(reply) => preset_reply = Some(reply),
+                    Err(error) => preset_result = Some(Err(error)),
+                }
+            }
             log(&event(
-                "NO-WRITE-MARKER",
+                if preset.is_some() {
+                    "PRESET-DISPATCH-MARKER"
+                } else {
+                    "NO-WRITE-MARKER"
+                },
                 index,
-                serde_json::json!({"authorization":false,"action":"no syscall or callback to a writer"}),
+                serde_json::json!({"authorization":false,"preset_endpoint_attempted":dispatch_attempted.get(),"firmware_acceptance":"not-established"}),
             ))?;
             post_anchor = Some(now());
             baseline = Some(frame);
         }
+        if let Some(reply) = preset_reply.as_ref() {
+            let result = match reply.try_recv() {
+                Ok(result) => Some(result),
+                Err(std::sync::mpsc::TryRecvError::Empty) => None,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => Some(Err(
+                    "preset worker disconnected; outcome ambiguous; no retry".into(),
+                )),
+            };
+            if let Some(result) = result {
+                log(&event(
+                    "preset-endpoint-result",
+                    index,
+                    serde_json::json!({"result":result,"not_readback":true}),
+                ))?;
+                preset_result = Some(result);
+                preset_reply = None;
+            }
+        }
+    }
+    if dispatch_attempted.get() {
+        match preset_result {
+            Some(Ok(())) => {},
+            Some(Err(error)) => return Err(format!("POST supervision finished; preset endpoint failed: {error}; no retry")),
+            None => return Err("POST supervision finished; preset worker still pending; do not force unload; outcome ambiguous".into()),
+        }
+    }
+    if post_anomaly {
+        return Err(
+            "POST window finished with anomalies; no rollback or acceptance established".into(),
+        );
     }
     log(&event(
-        "completed-no-write-rehearsal",
+        if preset.is_some() {
+            "completed-staged-default-trial"
+        } else {
+            "completed-no-write-rehearsal"
+        },
         180,
         serde_json::json!({"samples":181,"FullSpeed_queries":1,"not_a_permanent_authorization":true}),
     ))
@@ -335,11 +434,11 @@ fn persist(file: &mut File, value: &serde_json::Value) -> Result<(), String> {
         .map_err(|e| format!("journal failure; stopping: {e}"))?;
     if matches!(
         value["event"].as_str(),
-        Some("baseline-sample" | "post-no-write-marker-sample")
+        Some("baseline-sample" | "post-no-write-marker-sample" | "post-preset-dispatch-sample")
     ) {
         let readings = &value["data"]["readings"];
         eprintln!(
-            "[{}] sample={} CPU={} C GPU={} C RPM1={} RPM2={} AC={} profile={} policy={} WRITE=false",
+            "[{}] sample={} CPU={} C GPU={} C RPM1={} RPM2={} AC={} profile={} policy={} PRESET_ATTEMPTED={}",
             value["source"],
             value["sample_index"],
             readings["cpu"]["value"],
@@ -348,7 +447,8 @@ fn persist(file: &mut File, value: &serde_json::Value) -> Result<(), String> {
             readings["fans"][1]["reported_speed"]["value"],
             readings["ac_online"],
             readings["profile"]["normalized"]["active"]["name"],
-            value["data"]["policy"]["disposition"]
+            value["data"]["policy"]["disposition"],
+            value["write_attempted"]
         );
     }
     Ok(())
@@ -359,26 +459,31 @@ fn finish(
     file: &mut File,
     result: Result<(), String>,
     source: &'static str,
+    preset_attempted: bool,
 ) -> Result<RehearsalResult, String> {
     match result {
         Ok(()) => Ok(RehearsalResult {
             source,
             log_file: path,
             completed: true,
-            write_attempted: false,
-            execution_enabled: false,
+            write_attempted: preset_attempted,
+            execution_enabled: preset_attempted,
         }),
         Err(error) => {
-            let log_result = persist(
-                file,
-                &event(
-                    "stopped-no-write",
-                    0,
-                    serde_json::json!({"source":source,"error":error}),
-                ),
+            let mut stopped = event(
+                if preset_attempted {
+                    "stopped-after-preset-dispatch"
+                } else {
+                    "stopped-no-write"
+                },
+                0,
+                serde_json::json!({"source":source,"error":error,"preset_endpoint_attempted":preset_attempted,"no_retry":true}),
             );
+            stopped["write_attempted"] = serde_json::json!(preset_attempted);
+            stopped["execution_enabled"] = serde_json::json!(preset_attempted);
+            let log_result = persist(file, &stopped);
             Err(format!(
-                "{error}; journal={}; final-log={log_result:?}; no write, no retry",
+                "{error}; journal={}; final-log={log_result:?}; preset_endpoint_attempted={preset_attempted}; no retry",
                 path.display()
             ))
         }
@@ -468,8 +573,15 @@ pub fn run_simulated_rehearsal(
         || clock.get(),
         |delay| clock.set(clock.get() + delay),
         |value| persist(&mut file, value),
+        None,
     );
-    finish(path, &mut file, result, "static-simulation; virtual-time")
+    finish(
+        path,
+        &mut file,
+        result,
+        "static-simulation; virtual-time",
+        false,
+    )
 }
 
 /// Strict parser for the fixed NVIDIA query: exactly one RTX 4060 Laptop GPU,
@@ -516,6 +628,83 @@ mod tests {
     use super::*;
     use std::cell::Cell;
 
+    #[test]
+    fn staged_preset_dispatch_is_once_and_post_monitoring_does_not_wait_for_wmi() {
+        use std::{cell::RefCell, sync::mpsc};
+        for scenario in 0..8 {
+            let registry = legion_fixtures::legion_slim_5_16arp9_registry();
+            let clock = Cell::new(0);
+            let calls = Cell::new(0);
+            let dispatches = Cell::new(0);
+            let pending = RefCell::new(None::<mpsc::Sender<Result<(), String>>>);
+            let mut records = Vec::new();
+            let mut dispatch = || {
+                dispatches.set(dispatches.get() + 1);
+                if scenario == 6 {
+                    return Err("mock dispatch error; no retry".into());
+                }
+                let (tx, rx) = mpsc::channel();
+                *pending.borrow_mut() = Some(tx);
+                Ok(rx)
+            };
+            let result = supervise(
+                &registry,
+                "static-simulation; preset-mocked",
+                |boundary| {
+                    let index = calls.get();
+                    calls.set(index + 1);
+                    if index == 90 && scenario != 2 {
+                        if let Some(tx) = pending.borrow_mut().take() {
+                            tx.send(if scenario == 1 {
+                                Err("mock WMI error".into())
+                            } else {
+                                Ok(())
+                            })
+                            .unwrap();
+                        }
+                    }
+                    let mut frame = simulated_frame(boundary);
+                    if scenario == 7 && index == 90 {
+                        return Err("mock sensor read failure".into());
+                    }
+                    if scenario == 5 && index == 61 {
+                        frame.cpu.value = Some(75.0);
+                    }
+                    if scenario == 3 {
+                        frame.cpu.value = Some(56.0);
+                    }
+                    if scenario == 4 {
+                        frame.full_speed = None;
+                    }
+                    Ok(frame)
+                },
+                || clock.get(),
+                |delay| clock.set(clock.get() + delay),
+                |value| {
+                    records.push(value.clone());
+                    Ok(())
+                },
+                Some(&mut dispatch),
+            );
+            if (3..=4).contains(&scenario) {
+                assert_eq!(dispatches.get(), 0);
+                assert!(result.is_err());
+            } else {
+                assert_eq!(dispatches.get(), 1);
+                assert_eq!(calls.get(), 181);
+                assert_eq!(result.is_ok(), scenario == 0);
+                assert!(records.iter().any(|r| r["sample_index"] == 180));
+                assert_eq!(
+                    records
+                        .iter()
+                        .filter(|r| r["event"] == "preset-dispatch-intent")
+                        .count(),
+                    1
+                );
+            }
+        }
+    }
+
     fn exercise(
         mut alter: impl FnMut(usize, &mut Frame),
         slow_at: Option<usize>,
@@ -548,6 +737,7 @@ mod tests {
                 records.push(value.clone());
                 Ok(())
             },
+            None,
         );
         (result, calls, records)
     }
