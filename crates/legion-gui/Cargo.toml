@@ -1,0 +1,14 @@
+[package]
+name = "legion-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+eframe.workspace = true
+legion-core = { path = "../legion-core" }
+legion-linux = { path = "../legion-linux", features = ["linux-status"] }
+
+[lints]
+workspace = true
