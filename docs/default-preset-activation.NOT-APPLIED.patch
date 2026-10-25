@@ -1,0 +1,30 @@
+diff --git a/scripts/run-no-write-supervision-with-modules.sh b/scripts/run-no-write-supervision-with-modules.sh
+--- a/scripts/run-no-write-supervision-with-modules.sh
++++ b/scripts/run-no-write-supervision-with-modules.sh
+@@ -8,5 +8,5 @@
+ if [[ ${1-} == I-AUTHORIZE-ONE-DEFAULT-83EX-FAN-PRESET && $# == 1 ]]; then
+     # Not a runtime override. Requires a separately approved activation diff.
+-    readonly STAGED_EXECUTION_AUTHORIZED=0
++    readonly STAGED_EXECUTION_AUTHORIZED=1
+     (( STAGED_EXECUTION_AUTHORIZED == 1 )) || {
+         echo 'BLOCKED: staged preset execution not authorized; no modules touched.' >&2; exit 2;
+diff --git a/crates/legion-linux/src/trial_monitor_live.rs b/crates/legion-linux/src/trial_monitor_live.rs
+--- a/crates/legion-linux/src/trial_monitor_live.rs
++++ b/crates/legion-linux/src/trial_monitor_live.rs
+@@ -204,5 +204,5 @@
+     idle_attested: bool,
+ ) -> Result<RehearsalResult, String> {
+-    const EXECUTION_AUTHORIZED: bool = false;
++    const EXECUTION_AUTHORIZED: bool = true;
+     if !EXECUTION_AUTHORIZED {
+         return Err("default-preset execution blocked by constant false; no host access".into());
+diff --git a/kernel/experimental-lenovo-fan-wmi/legion_lenovo_fan_wmi.c b/kernel/experimental-lenovo-fan-wmi/legion_lenovo_fan_wmi.c
+--- a/kernel/experimental-lenovo-fan-wmi/legion_lenovo_fan_wmi.c
++++ b/kernel/experimental-lenovo-fan-wmi/legion_lenovo_fan_wmi.c
+@@ -115,5 +115,5 @@
+  * Enabling it requires a new reviewed code change, not a load-time argument.
+  */
+-static const bool legion_control_execution_authorized = false;
++static const bool legion_control_execution_authorized = true;
+ static atomic_t legion_control_attempted = ATOMIC_INIT(0);
+ static bool legion_control_full_speed_disabled;
