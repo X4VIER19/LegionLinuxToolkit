@@ -5,6 +5,26 @@ hardware de portátiles Lenovo Legion. El desarrollo comienza de forma
 conservadora con una sola máquina y privilegia las interfaces que ya ofrece el
 kernel.
 
+## Estado de cierre
+
+**LegionLinuxToolkit queda pausado, no abandonado.**
+
+El desarrollo se detiene temporalmente por disponibilidad de recursos para
+continuar trabajando con herramientas de asistencia de programación.
+
+Se conservan los avances, la documentación, las pruebas y el historial de Git.
+
+La próxima etapa deberá comenzar con la interfaz gráfica, aprovechar el trabajo
+ya realizado y abordar posteriormente el control seguro de los ventiladores.
+
+El objetivo a largo plazo permanece intacto: disponer de una alternativa nativa
+para Linux que permita administrar de forma fiable las curvas de ventilación y
+otras funciones de hardware de los equipos Lenovo Legion.
+
+**Fin de la parte 3 — 25 de octubre de 2026.**
+
+*Proyecto en pausa. Desarrollo pendiente de continuación.*
+
 ## Equipo objetivo inicial
 
 | Componente | Valor |
