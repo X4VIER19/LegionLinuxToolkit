@@ -73,7 +73,7 @@ pub use hwmon::{
 pub use hwmon_real::{HwmonLinuxReading, HwmonRealReadError, approved_one_shot_hwmon_rpm_read};
 pub use offline_fan_response::{
     OfflineFanResponseAnalysis, OfflineFanResponseError, OfflineFanResponseProvenance,
-    analyze_offline_fan_response_file,
+    analyze_offline_fan_response_file, read_offline_regular_file, save_offline_curve_json,
 };
 
 #[cfg(any(

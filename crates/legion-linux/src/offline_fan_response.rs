@@ -126,7 +126,7 @@ pub fn analyze_offline_fan_response_file(
 }
 
 /// Shared bounded offline acquisition. Never opens a device or follows links.
-pub(crate) fn read_offline_regular_file(
+pub fn read_offline_regular_file(
     path: &Path,
     limit: usize,
 ) -> Result<Vec<u8>, OfflineFanResponseError> {
@@ -161,6 +161,37 @@ pub(crate) fn read_offline_regular_file(
     }
 
     read_bounded_offline_bytes(&file, limit)
+}
+
+/// Saves a new local curve document only; never overwrites files or follows
+/// links. Shares the offline reader's rejection of host interface paths.
+pub fn save_offline_curve_json(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    use std::io::Write;
+    if !path.is_absolute() || path_targets_forbidden_interface(path) || bytes.len() > 4096 {
+        return Err("curve output requires an absolute local path and at most 4096 bytes".into());
+    }
+    let fd = openat2(
+        CWD,
+        path,
+        OFlags::WRONLY
+            | OFlags::CREATE
+            | OFlags::EXCL
+            | OFlags::CLOEXEC
+            | OFlags::NOFOLLOW
+            | OFlags::NONBLOCK,
+        Mode::RUSR | Mode::WUSR,
+        ResolveFlags::NO_SYMLINKS | ResolveFlags::NO_MAGICLINKS,
+    )
+    .map_err(|e| format!("new curve file (no overwrite): {e}"))?;
+    if FileType::from_raw_mode(fstat(&fd).map_err(|e| e.to_string())?.st_mode)
+        != FileType::RegularFile
+    {
+        return Err("curve output must be a regular file".into());
+    }
+    let mut file = File::from(fd);
+    file.write_all(bytes)
+        .and_then(|_| file.sync_all())
+        .map_err(|e| e.to_string())
 }
 
 fn read_bounded_offline_bytes(

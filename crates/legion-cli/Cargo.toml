@@ -43,6 +43,7 @@ required-features = ["approved-real-hwmon-rpm-read"]
 
 [dependencies]
 legion-core = { path = "../legion-core" }
+legion-fan = { path = "../legion-fan" }
 legion-fixtures = { path = "../legion-fixtures" }
 legion-linux = { path = "../legion-linux" }
 serde.workspace = true
