@@ -12,6 +12,12 @@ approved-real-platform-profile-read = ["legion-linux/approved-real-platform-prof
 # This forwards only to a separately named experimental binary. The default
 # `legion-cli` remains simulated-only and cannot acquire host hwmon data.
 approved-real-hwmon-rpm-read = ["legion-linux/approved-real-hwmon-rpm-read"]
+experimental-fan-control-preflight = ["legion-linux/experimental-fan-control-plan"]
+
+[[bin]]
+name = "legion-cli-fan-control-preflight"
+path = "src/bin/legion-cli-fan-control-preflight.rs"
+required-features = ["experimental-fan-control-preflight"]
 
 [[bin]]
 name = "legion-cli-platform-profile-real-read"
