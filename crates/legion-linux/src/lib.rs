@@ -26,6 +26,8 @@ use std::{
     fmt,
 };
 
+#[cfg(any(test, feature = "experimental-fan-control-plan"))]
+pub mod fan_control_transport;
 mod host_identity;
 mod hwmon;
 #[cfg(any(test, feature = "approved-real-hwmon-rpm-read"))]

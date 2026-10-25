@@ -22,6 +22,8 @@ approved-real-hwmon-rpm-read = ["approved-real-dmi-identity-read"]
 # constructor and always fails closed: a supported kernel-space WMI driver is
 # still required before any firmware call can be considered.
 experimental-fan-wmi-transport = []
+# Offline MethodId 6 plan only; no callable write transport or host endpoint.
+experimental-fan-control-plan = ["experimental-fan-wmi-transport"]
 # Builds a planning-only entry point. It cannot invoke the transport or reach
 # a host WMI device, and is never enabled by default.
 experimental-fan-wmi-read = ["experimental-fan-wmi-transport"]

@@ -14,6 +14,7 @@ use serde::Serialize;
 use std::{collections::BTreeSet, fmt};
 
 pub mod control_evidence;
+pub mod control_payload;
 mod curve_catalog;
 mod fan_get_table;
 mod fan_get_table_abi;
