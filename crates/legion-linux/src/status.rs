@@ -1,4 +1,5 @@
-//! Explicit single Linux status snapshot, no monitor, writer or module loader.
+//! Explicit Linux snapshots, shared with the requested CLI monitor.
+//! No automatic polling, writer or module loader in this reader.
 use crate::{ApprovedRealReadActivation, PlatformProfileQuery, SysfsPlatformProfileProvider};
 use legion_core::{
     ConfidenceLevel, FanValidation, PlatformProfileReading, TelemetryArtifact, TelemetryProvenance,
@@ -39,7 +40,7 @@ fn temperature(celsius: f64, source: String) -> TelemetryValue<f64> {
 }
 
 fn fan_warnings(fans: &Result<Vec<crate::HwmonFanReading>, String>) -> Vec<String> {
-    let mut warnings = vec!["Instantánea no atómica; no sondeo ni reintentos. NVIDIA no informa la edad física de su sensor.".into()];
+    let mut warnings = vec!["Instantánea no atómica; sin reintento de esta muestra. NVIDIA no informa la edad física de su sensor.".into()];
     if let Ok(fans) = fans {
         if fans.iter().any(|f| f.driver_name == "acpi_fan") {
             warnings.push("acpi_fan no representa necesariamente ambos ventiladores; canales sin asignación CPU/GPU.".into());
@@ -58,57 +59,137 @@ fn fan_warnings(fans: &Result<Vec<crate::HwmonFanReading>, String>) -> Vec<Strin
 /// DMI is observed only to enforce the existing 83EX/NUCN15WW gate; never
 /// emits RealReadAuthorization. No paths/configuration/confirmation bypass.
 pub fn read_once() -> Result<LinuxStatus, String> {
-    static USED: AtomicBool = AtomicBool::new(false);
-    USED.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        .map_err(|_| "one status snapshot per process; no retry")?;
-    let started = Instant::now();
-    let identity = crate::approved_one_shot_dmi_identity_read("I-UNDERSTAND-READ-ONLY-DMI")
-        .map_err(|e| format!("status DMI gate: {e}"))?;
-    if !crate::hwmon_real::is_exact_target_identity(&identity.identity) {
-        return Err(
-            "status supports only observed Lenovo 83EX / NUCN15WW; no hardware authorization"
-                .into(),
-        );
+    StatusReader::open()?.read_once()
+}
+
+/// Reuses the same read-only acquisition for an explicitly requested monitor.
+/// Private fields, fixed paths; DMI is gated once per session, not per sample.
+pub struct StatusReader {
+    source: crate::hwmon_real::ConfinedHwmonSource,
+}
+
+impl StatusReader {
+    pub fn open() -> Result<Self, String> {
+        static USED: AtomicBool = AtomicBool::new(false);
+        USED.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .map_err(|_| "one status reader per process; no implicit restart")?;
+        let identity = crate::approved_one_shot_dmi_identity_read("I-UNDERSTAND-READ-ONLY-DMI")
+            .map_err(|e| format!("status DMI gate: {e}"))?;
+        if !crate::hwmon_real::is_exact_target_identity(&identity.identity) {
+            return Err(
+                "status supports only observed Lenovo 83EX / NUCN15WW; no hardware authorization"
+                    .into(),
+            );
+        }
+        let root = crate::open_fixed_sysfs_root().map_err(|e| format!("status sysfs: {e:?}"))?;
+        let source = crate::hwmon_real::ConfinedHwmonSource::from_linux_root(root);
+        Ok(Self { source })
     }
-    let root = crate::open_fixed_sysfs_root().map_err(|e| format!("status sysfs: {e:?}"))?;
-    let source = crate::hwmon_real::ConfinedHwmonSource::from_linux_root(root);
-    let cpu_tctl = source
-        .read_status_cpu_once()
-        .map(|(c, _, name)| temperature(c, name));
-    let ac_online = source.read_ac_once().map(|(online, _)| online);
-    let fans = source.read_once(true, None).map_err(|e| e.to_string());
-    let platform_profile =
-        SysfsPlatformProfileProvider::new(ApprovedRealReadActivation::ApprovedOneShot)
-            .map_err(|e| format!("profile open: {e:?}"))
-            .and_then(|provider| provider.read_once().map_err(|e| e.to_string()))
-            .map(|reading| reading.profile().clone());
-    let gpu_temperature = crate::nvidia::nvidia_once()
-        .and_then(|bytes| crate::nvidia::parse_nvidia_temperature(&bytes))
-        .map(|(pci, c)| {
-            temperature(
-                c,
-                format!("NVIDIA:{pci}:temperature.gpu; current-query; hardware-cache-age-unknown"),
-            )
-        });
-    let warnings = fan_warnings(&fans);
-    Ok(LinuxStatus {
-        source: "linux-read-only-single-status",
-        acquisition_ms: started.elapsed().as_millis(),
-        observed_unix_ms: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|e| e.to_string())?
-            .as_millis(),
-        cpu_tctl,
-        gpu_temperature,
-        ac_online,
-        ac_source: "ACAD/type=Mains; ACAD/online",
-        platform_profile,
-        fans,
-        warnings,
-    })
+
+    pub fn read_once(&self) -> Result<LinuxStatus, String> {
+        let started = Instant::now();
+        let source = &self.source;
+        let cpu_tctl = source
+            .read_status_cpu_once()
+            .map(|(c, _, name)| temperature(c, name));
+        let ac_online = source.read_ac_once().map(|(online, _)| online);
+        let fans = source.read_once(true, None).map_err(|e| e.to_string());
+        let platform_profile =
+            SysfsPlatformProfileProvider::new(ApprovedRealReadActivation::ApprovedOneShot)
+                .map_err(|e| format!("profile open: {e:?}"))
+                .and_then(|provider| provider.read_once().map_err(|e| e.to_string()))
+                .map(|reading| reading.profile().clone());
+        let gpu_temperature = crate::nvidia::nvidia_once()
+            .and_then(|bytes| crate::nvidia::parse_nvidia_temperature(&bytes))
+            .map(|(pci, c)| {
+                temperature(
+                    c,
+                    format!(
+                        "NVIDIA:{pci}:temperature.gpu; current-query; hardware-cache-age-unknown"
+                    ),
+                )
+            });
+        let warnings = fan_warnings(&fans);
+        Ok(LinuxStatus {
+            source: "linux-read-only-single-status",
+            acquisition_ms: started.elapsed().as_millis(),
+            observed_unix_ms: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|e| e.to_string())?
+                .as_millis(),
+            cpu_tctl,
+            gpu_temperature,
+            ac_online,
+            ac_source: "ACAD/type=Mains; ACAD/online",
+            platform_profile,
+            fans,
+            warnings,
+        })
+    }
 }
 
 impl LinuxStatus {
+    pub fn to_compact_text(&self) -> String {
+        let temp = |v: &Result<TelemetryValue<f64>, String>| match v {
+            Ok(v) => v
+                .value
+                .map(|c| format!("{c:.2}°C"))
+                .unwrap_or("ausente".into()),
+            Err(e) => format!("ERROR({e})"),
+        };
+        let ac = match &self.ac_online {
+            Ok(true) => "AC".into(),
+            Ok(false) => "batería".into(),
+            Err(e) => format!("ERROR AC({e})"),
+        };
+        let profile = match &self.platform_profile {
+            Ok(p) => format!(
+                "{} ({:?})",
+                p.normalized
+                    .active
+                    .as_ref()
+                    .map(|p| p.name.as_str())
+                    .unwrap_or("ausente"),
+                p.state
+            ),
+            Err(e) => format!("ERROR({e})"),
+        };
+        let fans = match &self.fans {
+            Ok(fans) if fans.is_empty() => "sin entradas RPM".into(),
+            Ok(fans) => fans
+                .iter()
+                .map(|f| {
+                    format!(
+                        "{}:{}/fan{}={}RPM [{}; {:?}]",
+                        f.driver_name,
+                        f.device_id,
+                        f.channel,
+                        f.rpm
+                            .value
+                            .map(|rpm| rpm.to_string())
+                            .unwrap_or("ausente".into()),
+                        if f.validation == FanValidation::Validated {
+                            "validado"
+                        } else {
+                            "no validado"
+                        },
+                        f.interpretation
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" | "),
+            Err(e) => format!("ERROR RPM({e})"),
+        };
+        format!(
+            "CPU(k10temp:Tctl)={} GPU(NVIDIA)={} | {} | perfil={} | {}",
+            temp(&self.cpu_tctl),
+            temp(&self.gpu_temperature),
+            ac,
+            profile,
+            fans
+        )
+    }
+
     pub fn to_text(&self) -> String {
         let temp = |reading: &Result<TelemetryValue<f64>, String>| match reading {
             Ok(v) => match v.value {
@@ -206,6 +287,11 @@ mod tests {
             fans,
         };
         let text = snapshot.to_text();
+        let compact = snapshot.to_compact_text();
+        assert!(compact.contains("CPU(k10temp:Tctl)=ERROR(fixture permission denied)"));
+        assert!(compact.contains("GPU(NVIDIA)=ERROR(fixture NVIDIA N/A)"));
+        assert!(compact.contains("yogafan:fixture/fan1=0RPM [no validado; NonConclusive]"));
+        assert!(compact.contains("acpi_fan:fixture/fan1=1500RPM"));
         assert!(text.contains("NO demuestra ventiladores detenidos"));
         assert!(text.contains("no representa necesariamente ambos"));
         assert!(text.contains("acpi_fan"));

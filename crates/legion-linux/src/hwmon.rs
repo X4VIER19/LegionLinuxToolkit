@@ -45,10 +45,20 @@ pub enum HwmonDriverClassification {
 #[serde(rename_all = "kebab-case", tag = "kind")]
 pub enum HwmonModuleProvenance {
     StaticSimulation,
-    Verified83ExExperimentalQuirk { module_name: String },
-    OriginalYogafan { module_name: String },
+    Verified83ExExperimentalQuirk {
+        module_name: String,
+    },
+    OriginalYogafan {
+        module_name: String,
+    },
+    /// Expected ACPI driver metadata, not validation of measured RPM or fan count.
+    StandardAcpiFan {
+        module_name: String,
+    },
     Missing,
-    Unexpected { module_name: String },
+    Unexpected {
+        module_name: String,
+    },
 }
 
 /// One discovered, channel-neutral fan input. `channel` is the hwmon channel

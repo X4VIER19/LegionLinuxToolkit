@@ -239,7 +239,7 @@ impl ConfinedHwmonSource {
                     entry: entry.clone(),
                     reason,
                 })?;
-                let module_provenance = self.module_provenance(&device_id);
+                let module_provenance = self.module_provenance(&device_id, &name);
                 let classification =
                     classify_driver(&name, target_identity_matched, &module_provenance);
                 let reading = if let Some(label) = simulation_label {
@@ -387,7 +387,7 @@ impl ConfinedHwmonSource {
         }
         let cpu_device = &cpu_devices[0];
         let fan_device = &fan_devices[0];
-        let module = self.module_provenance(fan_device);
+        let module = self.module_provenance(fan_device, "yogafan");
         if classify_driver("yogafan", true, &module)
             != HwmonDriverClassification::Verified83ExExperimentalQuirk
         {
@@ -441,7 +441,7 @@ impl ConfinedHwmonSource {
         };
         let (fan1, raw1) = read_fan(1)?;
         let (fan2, raw2) = read_fan(2)?;
-        if self.module_provenance(fan_device) != module {
+        if self.module_provenance(fan_device, "yogafan") != module {
             return Err("quirk module provenance changed during sample".into());
         }
         let (ac_online, ac_original) = self.read_ac_once()?;
@@ -548,7 +548,7 @@ impl ConfinedHwmonSource {
     /// Reads only the final component of the fixed sysfs `module` link. The
     /// link is evidence about driver provenance, not a writable control path.
     /// Failure to obtain it does not manufacture a module identity.
-    fn module_provenance(&self, device_id: &str) -> HwmonModuleProvenance {
+    fn module_provenance(&self, device_id: &str, driver_name: &str) -> HwmonModuleProvenance {
         let link = self
             .discovery_directory
             .join(device_id)
@@ -560,6 +560,9 @@ impl ConfinedHwmonSource {
             return HwmonModuleProvenance::Missing;
         };
         match name {
+            "fan" if driver_name == "acpi_fan" => HwmonModuleProvenance::StandardAcpiFan {
+                module_name: name.to_owned(),
+            },
             "yogafan_83ex" => HwmonModuleProvenance::Verified83ExExperimentalQuirk {
                 module_name: name.to_owned(),
             },
@@ -717,7 +720,7 @@ mod tests {
         )
         .unwrap();
         let source = source(&path);
-        let verified = source.module_provenance("hwmon7");
+        let verified = source.module_provenance("hwmon7", "yogafan");
         assert!(matches!(
             verified,
             HwmonModuleProvenance::Verified83ExExperimentalQuirk { .. }
@@ -790,8 +793,22 @@ mod tests {
         fs::create_dir_all(&acpi).unwrap();
         fs::write(acpi.join("name"), b"acpi_fan\n").unwrap();
         fs::write(acpi.join("fan1_input"), b"1500\n").unwrap();
+        fs::create_dir_all(acpi.join("device/driver")).unwrap();
+        symlink("/sys/module/fan", acpi.join("device/driver/module")).unwrap();
         fs::write(path.join("class/power_supply/ACAD/online"), b"0\n").unwrap();
         let source = source(&path);
+        assert_eq!(
+            source.module_provenance("hwmon15", "acpi_fan"),
+            HwmonModuleProvenance::StandardAcpiFan {
+                module_name: "fan".into()
+            }
+        );
+        assert_eq!(
+            source.module_provenance("hwmon15", "yogafan"),
+            HwmonModuleProvenance::Unexpected {
+                module_name: "fan".into()
+            }
+        );
         assert_eq!(source.read_status_cpu_once().unwrap().0, 43.5);
         assert!(!source.read_ac_once().unwrap().0);
         let fans = source.read_once(true, Some("status-simulation")).unwrap();
