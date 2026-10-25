@@ -9,7 +9,9 @@ de OTHER_METHOD. Ningún callback ejecuta firmware. El endpoint root-only
 `/dev/legion-fan-default-preset-experimental` admite exclusivamente 64 bytes:
 selector 1, ceros reservados y UInt16 LE [1..10]. Sin ioctl, otros presets,
 fallback ni autoload. Una guardia atómica global se consume antes del intento,
-también si la barrera lo bloquea. La constante kernel sigue siendo `false`.
+también ante errores. Las tres constantes se activaron por autorización de
+preparación; los artefactos NO se han ejecutado y la operación física sigue
+requiriendo autorización independiente.
 
 El monitor reutiliza los 60 segundos previos y 120 posteriores, los cortes
 absolutos CPU<=55/GPU<=50/RPM>=1200 y el criterio de calentamiento >3 desde
@@ -43,10 +45,9 @@ fuera de cadencia/edad, identidad incompatible o cambio de huella de fuentes.
 Un timeout del worker se puede registrar, pero un bloqueo de kernel o pérdida
 continuada de sensores no permite prometer supervisión efectiva ni recuperación.
 
-**Tres barreras pendientes de revisión/autorización:** constante shell 0,
-constante Rust false (antes de todo acceso al host) y constante kernel false.
-Compilar la variante combinada no las elimina. La ejecución propuesta, hoy
-bloqueada antes de cargar módulos, es **NO AUTORIZADA**:
+**Preparación activada, operación NO AUTORIZADA:** constantes shell 1,
+Rust true y kernel true, exactamente las tres líneas revisadas. El comando
+ya NO está bloqueado por esas constantes: NO ejecutarlo sin nueva autorización.
 
 ```bash
 sudo bash /home/x4vier19/Documentos/GitHub/LegionLinuxToolkit/scripts/run-no-write-supervision-with-modules.sh \
@@ -64,21 +65,22 @@ omite SFAN puede devolverlo. RPM/temperaturas permiten observar consecuencias,
 no demostrar los 107 destinos EC, la selección efectiva de catálogo ni una
 curva aplicada. GFAN tampoco acredita por sí solo esos estados. CMRD, Fn+Q,
 reiniciar o restaurar desde Windows/LLT no garantizan rollback parcial. Antes
-de activar: revisar diff y hashes nuevos, aprobar las tres barreras, el comando
-concreto, la contingencia térmica y la restauración manual Windows ensayada.
+de ejecutar: autorización independiente del comando concreto, con los hashes
+preparados, la contingencia térmica y la restauración manual Windows ensayada.
 Ni un log previo ni una respuesta correcta constituyen autorización.
 
-## Paquete final bloqueado y contingencia del operador
+## Paquete final activado, sin ejecutar, y contingencia del operador
 
 El diff separado `default-preset-activation.NOT-APPLIED.patch` muestra SOLO
-las tres constantes que cambiarían. No está aplicado y no es autorización.
-Se comprobó con `git apply --check`, que no modifica archivos. Aplicarlo exige
-aprobación explícita de la excepción experimental; no se cambia AGENTS.md.
+las tres constantes revisadas y YA APLICADAS. Se conserva su nombre histórico;
+no volver a aplicarlo. Se comprobó con `git apply --reverse --check`, sin
+revertirlo. La autorización recibida cubre solo preparación, no operación.
+No se cambia AGENTS.md ni se amplía a otros métodos, presets o cargas.
 
-Artefactos actuales, ambos BLOQUEADOS y sin cargar:
+Artefactos actuales, activados pero SIN EJECUTAR/SIN CARGAR:
 
-- Monitor: SHA-256 `2a407564c2222604f8fc8d3371a7728bb2ab62b42122dec9c3ceb96485e5ba10`.
-- Helper combinado: SHA-256 `365727b56e4f8539cf05993599c3f6413c3720e13805fd7f49d9035b5769face`,
+- Monitor: SHA-256 `56ab69f2994032840a9cd6e986fa6b477a869d46a2f94cc8d2d6863682262a12`.
+- Helper combinado: SHA-256 `1febdb209599ab6d6b1559977d7e6153daf91ef29e8a475c0b740ab9709d2697`,
   `target/fan-default-preset-staged/legion_lenovo_fan_wmi.ko`, nombre interno
   `legion_lenovo_fan_wmi`, dependencia wmi, vermagic Nobara 7.2.11 completo.
   Las copias de C, headers y Makefile coinciden con el árbol actual y el comando
@@ -93,30 +95,12 @@ sudo bash /home/x4vier19/Documentos/GitHub/LegionLinuxToolkit/scripts/run-no-wri
   I-AUTHORIZE-TEMPORARY-MODULES-AND-NO-WRITE-SUPERVISION
 ```
 
-Si posteriormente se autoriza aplicar el diff, hay que reconstruir monitor y
-helper y revisar/actualizar sus hashes fijados en el wrapper ANTES de autorizar
-la carga. Los hashes bloqueados no son hashes de binarios activados y no se
-debe suprimir su comprobación. Comandos de empaquetado futuro, NO ejecutados:
+Monitor y helper ya reconstruidos; hashes nuevos fijados y verificados en el
+wrapper. No suprimir comprobaciones ni usar los hashes bloqueados anteriores.
 
-```bash
-cd /home/x4vier19/Documentos/GitHub/LegionLinuxToolkit
-# SOLO tras aprobación específica del diff; todavía NO autoriza la ejecución.
-git apply docs/default-preset-activation.NOT-APPLIED.patch
-/home/x4vier19/.cargo/bin/cargo build --locked --offline -p legion-cli \
-  --features experimental-fan-trial-monitor --bin legion-cli-fan-trial-monitor
-cp kernel/experimental-lenovo-fan-wmi/Makefile \
-  kernel/experimental-lenovo-fan-wmi/legion_lenovo_fan_wmi.c \
-  kernel/experimental-lenovo-fan-wmi/*.h target/fan-default-preset-staged/
-make -C /usr/src/kernels/7.2.11-200.nobara.fc44.x86_64 \
-  M=/home/x4vier19/Documentos/GitHub/LegionLinuxToolkit/target/fan-default-preset-staged \
-  CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI=m \
-  CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ=y \
-  CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI_CONTROL_STAGING=y modules
-sha256sum target/debug/legion-cli-fan-trial-monitor \
-  target/fan-default-preset-staged/legion_lenovo_fan_wmi.ko
-```
-
-No ejecutar pruebas que invoquen el modo staged después de activarlo.
+No ejecutar pruebas que invoquen el modo staged después de activarlo. En
+particular, NO ejecutar la antigua prueba de barrera false ni tests de la
+feature sin filtro. El filtro offline revisado es `trial_monitor::tests::`.
 La llamada final propuesta es la del wrapper con el literal del preset arriba;
 permanece NO AUTORIZADA. El modo normal del wrapper no se convierte en escritura.
 No leer a mano el endpoint FullSpeed antes: consumiría su única observación.
