@@ -29,7 +29,6 @@
 #include "control_policy.h"
 
 #define LENOVO_FAN_WMI_GUID "92549549-4BDE-4F06-AC04-CE8BF898DBAA"
-#define LENOVO_OTHER_WMI_GUID "DC2A8805-3A8C-41BA-A6F7-092E0089CD3B"
 #define LENOVO_FAN_WMI_INSTANCE 0
 #define LENOVO_FAN_GET_TABLE_METHOD 5
 #define LENOVO_FAN_GET_TABLE_INPUT_BYTES 2
@@ -63,22 +62,15 @@ static_assert(sizeof(struct legion_fan_get_table_fat2) ==
  * MODULE_DEVICE_TABLE(): the experimental module must not acquire a WMI
  * modalias or automatic loading path.
  */
-#if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ)
-static const char legion_other_context;
-static struct wmi_device *legion_other_wmi_device;
-#endif
-static const struct wmi_device_id legion_fan_wmi_id_table[] = {
+/* Local exclusion only: it is not the native driver's transaction lock. */
+static DEFINE_MUTEX(legion_fan_wmi_lock);
 #if !IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ)
+static const struct wmi_device_id legion_fan_wmi_id_table[] = {
 	{ .guid_string = LENOVO_FAN_WMI_GUID },
-#endif
-#if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ)
-	{ .guid_string = LENOVO_OTHER_WMI_GUID, .context = &legion_other_context },
-#endif
 	{}
 };
 
 /* Protected passive binding state; it is set and cleared without WMI calls. */
-static DEFINE_MUTEX(legion_fan_wmi_lock);
 static struct wmi_device *legion_fan_wmi_device;
 
 /*
@@ -90,17 +82,6 @@ static int legion_fan_wmi_probe(struct wmi_device *wdev, const void *context)
 	(void)context;
 
 	mutex_lock(&legion_fan_wmi_lock);
-#if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ)
-	if (context == &legion_other_context) {
-		if (legion_other_wmi_device && legion_other_wmi_device != wdev) {
-			mutex_unlock(&legion_fan_wmi_lock);
-			return -EBUSY;
-		}
-		legion_other_wmi_device = wdev;
-		mutex_unlock(&legion_fan_wmi_lock);
-		return 0;
-	}
-#endif
 	if (legion_fan_wmi_device && legion_fan_wmi_device != wdev) {
 		mutex_unlock(&legion_fan_wmi_lock);
 		return -EBUSY;
@@ -114,10 +95,6 @@ static int legion_fan_wmi_probe(struct wmi_device *wdev, const void *context)
 static void legion_fan_wmi_remove(struct wmi_device *wdev)
 {
 	mutex_lock(&legion_fan_wmi_lock);
-#if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ)
-	if (legion_other_wmi_device == wdev)
-		legion_other_wmi_device = NULL;
-#endif
 	if (legion_fan_wmi_device == wdev)
 		legion_fan_wmi_device = NULL;
 	mutex_unlock(&legion_fan_wmi_lock);
@@ -131,6 +108,7 @@ static struct wmi_driver legion_fan_wmi_driver = {
 	.probe = legion_fan_wmi_probe,
 	.remove = legion_fan_wmi_remove,
 };
+#endif /* FanFullSpeed mode never registers or owns a WMI driver. */
 
 #if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI_CONTROL_STAGING)
 /* No setter, module parameter, endpoint or caller exists for this barrier.
@@ -350,13 +328,10 @@ static ssize_t legion_full_speed_read(struct file *file, char __user *buffer,
 		return -ENODEV;
 	if (atomic_cmpxchg(&full_speed_attempted, 0, 1))
 		return -EALREADY;
-	/* Consume even if binding/WMI/copy_to_user fails. No automatic retry. */
+	/* Consume even if GUID lookup/WMI/copy_to_user fails. No automatic retry. */
 	*offset = sizeof(response);
 	mutex_lock(&legion_fan_wmi_lock);
-	if (!legion_other_wmi_device)
-		goto unlock_full_speed;
-	legion_full_speed_evaluate(legion_other_wmi_device, &response);
-unlock_full_speed:
+	legion_full_speed_evaluate(&response);
 	mutex_unlock(&legion_fan_wmi_lock);
 	if (copy_to_user(buffer, &response, sizeof(response)))
 		return -EFAULT;
@@ -388,6 +363,7 @@ static int __init legion_fan_endpoint_init(void)
 	}
 #endif
 
+#if !IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ)
 	error = wmi_driver_register(&legion_fan_wmi_driver);
 	if (error) {
 #if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ)
@@ -395,13 +371,16 @@ static int __init legion_fan_endpoint_init(void)
 #endif
 		misc_deregister(&legion_fan_endpoint);
 	}
+#endif
 
 	return error;
 }
 
 static void __exit legion_fan_endpoint_exit(void)
 {
+#if !IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ)
 	wmi_driver_unregister(&legion_fan_wmi_driver);
+#endif
 #if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ)
 	misc_deregister(&legion_full_speed_endpoint);
 #endif

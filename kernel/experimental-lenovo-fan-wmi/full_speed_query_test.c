@@ -18,7 +18,6 @@ typedef int acpi_status;
 #define LEGION_FAN_READ_ACPI_RESPONSE_ERROR 3
 #define cpu_to_le32(value) (value)
 #define cpu_to_le64(value) (value)
-struct wmi_device { int unused; };
 struct acpi_buffer { size_t length; void *pointer; };
 union acpi_object {
 	int type;
@@ -26,11 +25,12 @@ union acpi_object {
 };
 static union acpi_object object;
 static int fail_transport, missing, calls, freed;
-static acpi_status wmidev_evaluate_method(struct wmi_device *device,
+static acpi_status wmi_evaluate_method(const char *guid,
 	int instance, int method, struct acpi_buffer *input, struct acpi_buffer *output)
 {
 	const unsigned char expected[] = {0, 0, 2, 4};
-	assert(device && instance == 0 && method == 17);
+	assert(!strcmp(guid, "DC2A8805-3A8C-41BA-A6F7-092E0089CD3B"));
+	assert(instance == 0 && method == 17);
 	assert(input->length == 4 && !memcmp(input->pointer, expected, 4));
 	assert(output->length == ACPI_ALLOCATE_BUFFER && !output->pointer);
 	calls++;
@@ -41,7 +41,6 @@ static void kfree(void *pointer) { if (pointer) { assert(pointer == &object); fr
 #include "full_speed_query.h"
 int main(void)
 {
-	struct wmi_device device;
 	int scenario;
 	for (scenario = 0; scenario < 5; scenario++) {
 		struct legion_full_speed_response response = {0};
@@ -50,7 +49,7 @@ int main(void)
 		missing = scenario == 3;
 		object.integer.type = scenario == 4 ? 99 : ACPI_TYPE_INTEGER;
 		object.integer.value = scenario;
-		legion_full_speed_evaluate(&device, &response);
+		legion_full_speed_evaluate(&response);
 		assert(calls == 1 && freed == !missing);
 		if (scenario < 2) {
 			assert(response.status == 0 && response.payload_size == 8);

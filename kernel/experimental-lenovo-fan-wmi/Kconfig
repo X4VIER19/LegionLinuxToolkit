@@ -21,8 +21,9 @@ config LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ
 	default n
 	help
 	  Adds only a fixed MethodId 17 query, gated by runtime confirmation.
-	  Never invokes firmware during init/probe/remove. Does not force binding
-	  to devices owned by another driver. No setters or curve activation.
+	  Uses the exported deprecated GUID-based API without registering a WMI
+	  driver or claiming a device. Never invokes firmware during init/exit.
+	  No setters or curve activation. Kernel compatibility must be reviewed.
 
 config LEGION_LINUX_EXPERIMENTAL_FAN_WMI_CONTROL_STAGING
 	bool "Compile inaccessible default-curve transport staging"

@@ -12,8 +12,7 @@ struct legion_full_speed_response {
 	__le64 value;
 } __packed;
 
-static inline void legion_full_speed_evaluate(struct wmi_device *device,
-				struct legion_full_speed_response *response)
+static inline void legion_full_speed_evaluate(struct legion_full_speed_response *response)
 {
 	const u8 request[4] = { 0, 0, 2, 4 };
 	struct acpi_buffer input = { .length = sizeof(request), .pointer = (void *)request };
@@ -22,7 +21,12 @@ static inline void legion_full_speed_evaluate(struct wmi_device *device,
 	acpi_status status;
 	response->payload_size = cpu_to_le32(0);
 	response->value = cpu_to_le64(0);
-	status = wmidev_evaluate_method(device, 0, 17, &input, &output);
+	/* Deprecated GUID API is intentionally restricted to this experiment.
+	 * It resolves the existing WMI device without claiming its driver binding.
+	 * No alternative GUID/method/argument or fallback is accepted.
+	 */
+	status = wmi_evaluate_method("DC2A8805-3A8C-41BA-A6F7-092E0089CD3B",
+				    0, 17, &input, &output);
 	if (ACPI_FAILURE(status)) {
 		response->status = cpu_to_le32(LEGION_FAN_READ_TRANSPORT_ERROR);
 		goto free_output;

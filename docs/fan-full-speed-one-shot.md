@@ -23,10 +23,11 @@ interna no se demuestra con AML. No se garantiza inocuidad por llamarse Get.
 
 El mismo módulo contiene el segundo GUID bajo
 CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ=y, desactivado por defecto.
-En esta modalidad solo intenta vincular el GUID Other; Kbuild rechaza combinar
-las opciones de lectura de tablas o control. No hay autoload. Si otro driver
-posee el GUID no se fuerza ni se desplaza: el endpoint responde unsupported.
-Debe comprobarse ese bloqueo antes de una prueba de carga autorizada.
+En esta modalidad no registra ningún wmi_driver. Resuelve el GUID mediante
+la API exportada `wmi_evaluate_method()`, que admite un dispositivo ya vinculado
+a lenovo_wmi_other. Kbuild rechaza combinar las opciones de lectura de tablas
+o control. No hay autoload, unbind ni desplazamiento del controlador nativo.
+Ver `fan-full-speed-guid-access.md` para límites de esta API deprecated.
 
 La activación requiere además el parámetro inmutable
 `full_speed_confirmation=I-UNDERSTAND-ONE-SHOT-FAN-FULL-SPEED-READ`.
@@ -54,9 +55,10 @@ SetFeatureValue no se implementa.
 
 ## Ejecución futura: requiere autorización separada, no realizada aquí
 
-Primero verificar kernel/cabeceras, identidad y propietario del GUID mediante
-metadatos. Si está vinculado a lenovo_wmi_other u otro driver, **abortar**:
-estos comandos no deben utilizarse para desplazarlo. No usar unbind ni force.
+Primero verificar kernel/cabeceras, identidad, unicidad y propietario del GUID
+mediante metadatos. La vinculación existente a lenovo_wmi_other se conserva.
+Abortar si hay varias coincidencias del GUID, suspensión/transiciones de
+dispositivo o estado inesperado. No usar unbind ni force.
 Compilar temporalmente el módulo con únicamente FULL_SPEED_READ=y; comprobar
 vermagic. Preparar la CLI sin ejecutarla:
 
