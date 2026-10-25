@@ -173,6 +173,13 @@ fn supervise(
             crate::fan_control_transport::control_identity_match(registry, &frame.identity),
             legion_core::MatchResult::Exact { .. }
         ) {
+            if staged && index == 60 {
+                log(&event(
+                    "preset-dispatch-blocked",
+                    index,
+                    serde_json::json!({"reason":"identity not matched unambiguously by existing compatibility registry"}),
+                ))?;
+            }
             return Err(
                 "identity not matched unambiguously by existing compatibility registry".into(),
             );
@@ -243,6 +250,16 @@ fn supervise(
             // Keep observing the remaining POST window; fail the final result.
             post_anomaly = true;
         } else if !good {
+            if staged && index == 60 {
+                log(&event(
+                    "preset-dispatch-blocked",
+                    index,
+                    serde_json::json!({
+                        "reasons":assessment.reasons,
+                        "full_speed_state":frame.full_speed.as_ref().map(|f| f.result().state),
+                    }),
+                ))?;
+            }
             return Err(format!(
                 "{}: {:?}",
                 if index <= 60 {
@@ -309,8 +326,55 @@ fn supervise(
                     index,
                     serde_json::json!({"preset":"1..10","response_is_not_EC_acceptance":true}),
                 ))?;
-                if now().saturating_sub(begin) > 3000 {
-                    return Err("boundary evidence stale before preset dispatch".into());
+                // The report above is evidence, NOT authorization. Re-evaluate
+                // the actual frame after journaling, including its current age.
+                let gate = assess_trial_sample(
+                    &frame.sample(now().saturating_sub(begin)),
+                    TrialPhase::BeforeWrite,
+                    None,
+                );
+                let exact_identity = matches!(
+                    crate::fan_control_transport::control_identity_match(registry, &frame.identity),
+                    legion_core::MatchResult::Exact { .. }
+                );
+                let full_speed_disabled = frame.sample(0).fan_full_speed == Some(false);
+                let live = origin == "linux-experimental-default-preset-trial";
+                let expected_artifact = if live {
+                    legion_core::TelemetryArtifact::LinuxReadOnly
+                } else {
+                    legion_core::TelemetryArtifact::StaticSimulation
+                };
+                let provenance_valid = (live || origin.starts_with("static-simulation"))
+                    && frame.cpu.provenance.artifact == expected_artifact
+                    && frame.gpu.provenance.artifact == expected_artifact
+                    && frame.profile.provenance.artifact == expected_artifact
+                    && frame
+                        .fans
+                        .iter()
+                        .all(|f| f.reported_speed.provenance.artifact == expected_artifact)
+                    && frame.full_speed.as_ref().is_some_and(|f| {
+                        if live {
+                            f.source() == "linux-wmi-one-shot; no-write-authorization"
+                        } else {
+                            f.source() == "static-simulation"
+                        }
+                    });
+                if !exact_identity
+                    || !full_speed_disabled
+                    || !provenance_valid
+                    || gate.disposition != TrialDisposition::CandidateOnlyNotAuthorization
+                    || !gate.reasons.is_empty()
+                {
+                    log(&event(
+                        "preset-dispatch-blocked",
+                        index,
+                        serde_json::json!({
+                            "exact_identity":exact_identity, "full_speed_disabled":full_speed_disabled,
+                            "provenance_valid":provenance_valid, "reasons":gate.reasons,
+                            "policy":gate.disposition,
+                        }),
+                    ))?;
+                    return Err("preset dispatch blocked by current boundary preconditions".into());
                 }
                 dispatch_attempted.set(true);
                 match dispatch() {
@@ -627,6 +691,98 @@ pub fn parse_nvidia_temperature(bytes: &[u8]) -> Result<(String, f64), String> {
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    #[test]
+    fn boundary_gate_rejects_missing_incompatible_and_stale_conditions_without_dispatch() {
+        use legion_core::{TelemetryArtifact, TelemetryState};
+        for scenario in 0..16 {
+            let registry = legion_fixtures::legion_slim_5_16arp9_registry();
+            let clock = Cell::new(0);
+            let calls = Cell::new(0);
+            let dispatches = Cell::new(0);
+            let mut records = Vec::new();
+            let mut dispatch = || {
+                dispatches.set(dispatches.get() + 1);
+                Err("must not reach dispatch".into())
+            };
+            let result = supervise(
+                &registry,
+                "static-simulation; boundary-gate",
+                |boundary| {
+                    calls.set(calls.get() + 1);
+                    let mut frame = simulated_frame(boundary);
+                    if boundary {
+                        match scenario {
+                            0 | 1 => {
+                                let mut bytes = [0; 20];
+                                bytes[0] = 1;
+                                bytes[2] = 12;
+                                bytes[8] = 8;
+                                bytes[12] = if scenario == 0 { 1 } else { 9 };
+                                frame.full_speed = Some(
+                                    crate::fan_full_speed::FullSpeedObservation::simulation(&bytes),
+                                );
+                            }
+                            2 => {
+                                frame.full_speed =
+                                    Some(crate::fan_full_speed::FullSpeedObservation::unavailable(
+                                        "mock read failure".into(),
+                                    ))
+                            }
+                            3 => frame.full_speed = None,
+                            4 => frame.ac_online = false,
+                            5 => {
+                                frame.profile.normalized.active.as_mut().unwrap().name =
+                                    "balanced".into()
+                            }
+                            6 => frame.cpu.value = Some(56.0),
+                            7 => frame.gpu.value = Some(51.0),
+                            8 => frame.fans[0].reported_speed.value = Some(1199),
+                            9 => frame.cpu.state = TelemetryState::Unvalidated,
+                            10 => frame.cpu.value = None,
+                            11 => {
+                                frame.identity = HostIdentity::declared_simulation(
+                                    legion_core::HostIdentityInput {
+                                        manufacturer: Some("Lenovo".into()),
+                                        product_identifier: Some("83EX".into()),
+                                        model: Some("Legion Slim 5 16ARP9".into()),
+                                        bios_version: Some("unknown".into()),
+                                        ..Default::default()
+                                    },
+                                    "mock incompatible BIOS",
+                                )
+                                .unwrap()
+                            }
+                            12 => frame.cpu.provenance.artifact = TelemetryArtifact::LinuxReadOnly,
+                            13 => {} // Journal delay invalidates an initially good frame.
+                            14 => frame.profile.state = TelemetryState::Unvalidated,
+                            _ => frame.fans[1].reported_speed.state = TelemetryState::Unavailable,
+                        }
+                    }
+                    Ok(frame)
+                },
+                || clock.get(),
+                |delay| clock.set(clock.get() + delay),
+                |value| {
+                    if scenario == 13 && value["event"] == "preset-dispatch-intent" {
+                        clock.set(clock.get() + 3001);
+                    }
+                    records.push(value.clone());
+                    Ok(())
+                },
+                Some(&mut dispatch),
+            );
+            assert!(result.is_err(), "scenario {scenario}");
+            assert_eq!(calls.get(), 61, "scenario {scenario}");
+            assert_eq!(dispatches.get(), 0, "scenario {scenario}");
+            assert!(
+                records
+                    .iter()
+                    .any(|r| r["event"] == "preset-dispatch-blocked"),
+                "scenario {scenario}"
+            );
+        }
+    }
 
     #[test]
     fn staged_preset_dispatch_is_once_and_post_monitoring_does_not_wait_for_wmi() {

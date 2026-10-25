@@ -27,6 +27,22 @@ se informa fallo final y nunca se reenvía el preset. Un fallo de journal,
 planificación, procedencia o bloqueo del kernel puede impedir supervisión;
 no se garantiza independencia física de los sensores frente al EC/AML.
 
+Compuerta de despacho: el informe preflight no autoriza nada. Inmediatamente
+antes del callback se exige coincidencia exacta del registro, FullSpeed disabled,
+procedencias coherentes (nunca fixtures en el camino real) y una reevaluación
+BeforeWrite del frame con su edad tras el journal: AC, custom, temperaturas,
+RPM, unidades/estados válidos y límites existentes. Un rechazo registra motivos
+y nunca consume un despacho. Las comprobaciones kernel permanecen adicionales.
+
+Comportamiento POST comprobado: se sigue observando ante error/resultado pendiente
+del escritor, incumplimiento térmico/RPM/AC/custom expresado en un frame, o error
+de adquisición reportado por el worker (se registra sin reutilizar valores).
+No se repite esa muestra; solo se intenta la siguiente muestra programada.
+Terminan el monitor los fallos de journal, retraso de planificación, adquisición
+fuera de cadencia/edad, identidad incompatible o cambio de huella de fuentes.
+Un timeout del worker se puede registrar, pero un bloqueo de kernel o pérdida
+continuada de sensores no permite prometer supervisión efectiva ni recuperación.
+
 **Tres barreras pendientes de revisión/autorización:** constante shell 0,
 constante Rust false (antes de todo acceso al host) y constante kernel false.
 Compilar la variante combinada no las elimina. La ejecución propuesta, hoy
