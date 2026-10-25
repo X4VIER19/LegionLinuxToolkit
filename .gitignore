@@ -1,1 +1,5 @@
 /target/
+
+# Extracciones privadas del firmware Lenovo
+/docs/firmware-evidence/gmzn-16arp9/DSDT.aml
+/docs/firmware-evidence/gmzn-16arp9/DSDT.dsl
