@@ -145,7 +145,7 @@ pub(crate) fn is_exact_target_identity(identity: &HostIdentity) -> bool {
 /// class `hwmonN` entries may legitimately be symlinks into `/sys/devices`; we
 /// therefore allow intermediate symlinks but retain `RESOLVE_BENEATH` and
 /// `RESOLVE_NO_MAGICLINKS`. `O_NOFOLLOW` protects the final attribute.
-struct ConfinedHwmonSource {
+pub(crate) struct ConfinedHwmonSource {
     root: File,
     discovery_directory: PathBuf,
 }
@@ -179,7 +179,7 @@ impl TrialSysfsSource {
 
 impl ConfinedHwmonSource {
     #[cfg(feature = "approved-real-hwmon-rpm-read")]
-    fn from_linux_root(root: File) -> Self {
+    pub(crate) fn from_linux_root(root: File) -> Self {
         Self {
             root,
             discovery_directory: PathBuf::from(HWMON_DISCOVERY_DIRECTORY),
@@ -194,7 +194,7 @@ impl ConfinedHwmonSource {
         }
     }
 
-    fn read_once(
+    pub(crate) fn read_once(
         &self,
         target_identity_matched: bool,
         simulation_label: Option<&str>,
@@ -403,35 +403,7 @@ impl ConfinedHwmonSource {
         if channels != [1, 2] {
             return Err("quirk must expose exactly fan1_input and fan2_input".into());
         }
-        let mut labels = Vec::new();
-        for entry in self
-            .list_device_entries(cpu_device)
-            .map_err(|e| e.to_string())?
-        {
-            if entry.len() > 10
-                && entry.starts_with("temp")
-                && entry.ends_with("_label")
-                && entry[4..entry.len() - 6]
-                    .bytes()
-                    .all(|c| c.is_ascii_digit())
-                && self
-                    .read_text_attribute(cpu_device, &entry)
-                    .map_err(|e| e.to_string())?
-                    == "Tctl"
-            {
-                labels.push(entry.replace("_label", "_input"));
-            }
-        }
-        if labels.len() != 1 {
-            return Err("exactly one k10temp:Tctl label required".into());
-        }
-        let cpu_original = self
-            .read_raw_attribute(cpu_device, &labels[0])
-            .map_err(|e| e.to_string())?;
-        let milli = parse_rpm(&cpu_original)?;
-        if !(5000..=110000).contains(&milli) {
-            return Err("Tctl outside trial range".into());
-        }
+        let (cpu_c, cpu_original, cpu_source) = self.read_cpu_device_once(cpu_device)?;
         let read_fan = |channel| -> Result<(HwmonFanReading, Vec<u8>), String> {
             let entry = format!("fan{channel}_input");
             let original = self
@@ -472,6 +444,66 @@ impl ConfinedHwmonSource {
         if self.module_provenance(fan_device) != module {
             return Err("quirk module provenance changed during sample".into());
         }
+        let (ac_online, ac_original) = self.read_ac_once()?;
+        Ok(SupervisionSysfsReading {
+            cpu_c,
+            cpu_original,
+            cpu_source,
+            fans: [fan1, fan2],
+            rpm_original: [raw1, raw2],
+            ac_online,
+            ac_original,
+        })
+    }
+
+    #[cfg(any(
+        test,
+        feature = "linux-status",
+        feature = "experimental-fan-trial-monitor"
+    ))]
+    fn read_cpu_device_once(&self, cpu_device: &str) -> Result<(f64, Vec<u8>, String), String> {
+        let mut labels = Vec::new();
+        for entry in self
+            .list_device_entries(cpu_device)
+            .map_err(|e| e.to_string())?
+        {
+            if entry.len() > 10
+                && entry.starts_with("temp")
+                && entry.ends_with("_label")
+                && entry[4..entry.len() - 6]
+                    .bytes()
+                    .all(|c| c.is_ascii_digit())
+                && self
+                    .read_text_attribute(cpu_device, &entry)
+                    .map_err(|e| e.to_string())?
+                    == "Tctl"
+            {
+                labels.push(entry.replace("_label", "_input"));
+            }
+        }
+        if labels.len() != 1 {
+            return Err("exactly one k10temp:Tctl label required".into());
+        }
+        let cpu_original = self
+            .read_raw_attribute(cpu_device, &labels[0])
+            .map_err(|e| e.to_string())?;
+        let milli = parse_rpm(&cpu_original)?;
+        if !(5000..=110000).contains(&milli) {
+            return Err("Tctl outside trial range".into());
+        }
+        Ok((
+            f64::from(milli) / 1000.0,
+            cpu_original,
+            format!("k10temp:Tctl:{cpu_device}:{}", labels[0]),
+        ))
+    }
+
+    #[cfg(any(
+        test,
+        feature = "linux-status",
+        feature = "experimental-fan-trial-monitor"
+    ))]
+    pub(crate) fn read_ac_once(&self) -> Result<(bool, Vec<u8>), String> {
         let supply_type = self
             .read_relative_attribute("class/power_supply/ACAD/type", "ACAD", "type")
             .map_err(|e| e.to_string())?;
@@ -486,15 +518,31 @@ impl ConfinedHwmonSource {
             b"0\n" | b"0" => false,
             _ => return Err("invalid ACAD/online".into()),
         };
-        Ok(SupervisionSysfsReading {
-            cpu_c: f64::from(milli) / 1000.0,
-            cpu_original,
-            cpu_source: format!("k10temp:Tctl:{cpu_device}:{}", labels[0]),
-            fans: [fan1, fan2],
-            rpm_original: [raw1, raw2],
-            ac_online,
-            ac_original,
-        })
+        Ok((ac_online, ac_original))
+    }
+
+    #[cfg(any(test, feature = "linux-status"))]
+    pub(crate) fn read_status_cpu_once(&self) -> Result<(f64, Vec<u8>, String), String> {
+        let mut devices = Vec::new();
+        for entry in fs::read_dir(&self.discovery_directory).map_err(|e| e.to_string())? {
+            let name = entry
+                .map_err(|e| e.to_string())?
+                .file_name()
+                .into_string()
+                .map_err(|_| "non-UTF8 hwmon entry")?;
+            if is_hwmon_directory_name(&name)
+                && self
+                    .read_text_attribute(&name, "name")
+                    .map_err(|e| e.to_string())?
+                    == "k10temp"
+            {
+                devices.push(name);
+            }
+        }
+        if devices.len() != 1 {
+            return Err("exactly one k10temp source required; no guess or fallback".into());
+        }
+        self.read_cpu_device_once(&devices[0])
     }
 
     /// Reads only the final component of the fixed sysfs `module` link. The
@@ -727,6 +775,46 @@ mod tests {
             legion_core::TelemetryArtifact::StaticSimulation
         );
         assert_eq!(reading.rpm_original[1], b"1500\n");
+        fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn status_reuses_tctl_ac_and_keeps_original_and_acpi_fans_distinct() {
+        let path = supervision_fixture("status");
+        let fan = path.join("class/hwmon/hwmon7");
+        fs::remove_file(fan.join("device/driver/module")).unwrap();
+        symlink("/sys/module/yogafan", fan.join("device/driver/module")).unwrap();
+        fs::write(fan.join("fan1_input"), b"0\n").unwrap();
+        fs::write(fan.join("fan2_input"), b"0\n").unwrap();
+        let acpi = path.join("class/hwmon/hwmon15");
+        fs::create_dir_all(&acpi).unwrap();
+        fs::write(acpi.join("name"), b"acpi_fan\n").unwrap();
+        fs::write(acpi.join("fan1_input"), b"1500\n").unwrap();
+        fs::write(path.join("class/power_supply/ACAD/online"), b"0\n").unwrap();
+        let source = source(&path);
+        assert_eq!(source.read_status_cpu_once().unwrap().0, 43.5);
+        assert!(!source.read_ac_once().unwrap().0);
+        let fans = source.read_once(true, Some("status-simulation")).unwrap();
+        assert_eq!(fans.len(), 3);
+        let original = fans.iter().find(|f| f.driver_name == "yogafan").unwrap();
+        assert_eq!(original.rpm.value, Some(0));
+        assert_eq!(original.validation, legion_core::FanValidation::Unvalidated);
+        assert_eq!(
+            original.interpretation,
+            legion_core::FanInterpretation::NonConclusive
+        );
+        assert_eq!(
+            fans.iter()
+                .find(|f| f.driver_name == "acpi_fan")
+                .unwrap()
+                .rpm
+                .value,
+            Some(1500)
+        );
+        fs::write(path.join("class/hwmon/hwmon9/temp1_input"), b"invalid\n").unwrap();
+        assert!(source.read_status_cpu_once().is_err());
+        fs::remove_file(path.join("class/power_supply/ACAD/online")).unwrap();
+        assert!(source.read_ac_once().is_err());
         fs::remove_dir_all(path).unwrap();
     }
 

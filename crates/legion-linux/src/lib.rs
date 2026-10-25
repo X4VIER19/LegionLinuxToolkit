@@ -1,14 +1,8 @@
-//! Linux-facing platform-profile architecture with no default public host
-//! filesystem access.
-//!
-//! This crate deliberately accepts bytes from an injected source. Phase 5B.3
-//! includes the virtual, in-memory source below. It also contains a private,
-//! production-shaped `openat2` provider behind an unconstructable activation
-//! capability. There is no public filesystem reader, configurable path, host
-//! root, fallback to `/sys`, write API, or CLI integration. Normal builds
-//! cannot initiate a host read; tests use only temporary fixture trees. A
-//! future real read is compiled only by the non-default, explicitly named
-//! experimental feature and is not exercised in this phase.
+//! Linux readers and isolated simulations. The `linux-status` feature exposes
+//! one explicitly requested status snapshot for the supported 83EX identity.
+//! It enables only existing read providers, not control-plan/firmware setters.
+//! No startup detection, module loading, configurable host roots or monitoring.
+//! Tests inject bytes or use temporary fixture trees, never host sensors.
 
 use legion_core::{
     ConfidenceLevel, PlatformProfileAdapter, PlatformProfileError, PlatformProfileInput,
@@ -34,7 +28,15 @@ mod host_identity;
 mod hwmon;
 #[cfg(any(test, feature = "approved-real-hwmon-rpm-read"))]
 mod hwmon_real;
+#[cfg(any(
+    test,
+    feature = "linux-status",
+    feature = "experimental-fan-control-plan"
+))]
+mod nvidia;
 mod offline_fan_response;
+#[cfg(feature = "linux-status")]
+pub mod status;
 #[cfg(any(test, feature = "experimental-fan-control-plan"))]
 pub mod trial_monitor;
 

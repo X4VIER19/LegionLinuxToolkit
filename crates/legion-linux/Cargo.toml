@@ -6,6 +6,8 @@ license.workspace = true
 authors.workspace = true
 
 [features]
+# Ordinary explicit `status` command: readers only, no control-plan features.
+linux-status = ["approved-real-hwmon-rpm-read", "approved-real-platform-profile-read"]
 experimental-fan-trial-monitor = ["approved-real-hwmon-rpm-read", "approved-real-platform-profile-read", "experimental-fan-full-speed-read"]
 experimental-fact-read = []
 # Deliberately opt-in and never enabled by default. It exposes only the

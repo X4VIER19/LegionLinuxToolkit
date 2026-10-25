@@ -10,6 +10,7 @@ use legion_linux::{
 use serde::Serialize;
 use std::{env, process::ExitCode};
 mod curves;
+mod status;
 
 fn main() -> ExitCode {
     match run(env::args().skip(1).collect()) {
@@ -18,7 +19,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
-            eprintln!("simulated-only CLI error: {error}");
+            eprintln!("CLI error: {error}");
             ExitCode::from(2)
         }
     }
@@ -51,6 +52,9 @@ enum SimulatedWmiOutcome {
 }
 
 fn run(args: Vec<String>) -> Result<String, String> {
+    if args.first().is_some_and(|arg| arg == "status") {
+        return status::run(&args[1..]);
+    }
     if args.first().is_some_and(|arg| arg == "curve") {
         return curves::run(&args[1..]);
     }
@@ -81,7 +85,7 @@ fn run(args: Vec<String>) -> Result<String, String> {
                 scenario = args.get(index).ok_or("--scenario requires a fixture name")?;
             }
             "--help" | "-h" => {
-                return Ok("Usage: legion-cli [summary|profiles|attributes] [--format text|json] [--fixture valid|missing|malformed]\n       legion-cli compatibility [--device known|unknown|incomplete] [--format text|json]\n       legion-cli telemetry [--scenario valid|absent|unvalidated|inconsistent|read-error] [--format text|json]\n       legion-cli platform-profile [--scenario valid|active-only|missing-active|empty-active|empty-choices|unknown|duplicate|inconsistent|malformed] [--format text|json]\n       legion-cli fan-rpm [--scenario quirk-two-channel|one-channel|zero-generic|read-error|duplicate-source|device-disappeared|missing-device|invalid-rpm] [--format text|json]\n       legion-cli wmi [--scenario valid|unavailable|inconsistent-buffer|unsupported] [--format text|json]\nCurve editor: legion-cli curve --help\nDiagnostics are embedded/simulated; curve documents use explicit local regular files only. No hardware controls.".into())
+                return Ok("Usage: legion-cli [summary|profiles|attributes] [--format text|json] [--fixture valid|missing|malformed]\n       legion-cli compatibility [--device known|unknown|incomplete] [--format text|json]\n       legion-cli telemetry [--scenario valid|absent|unvalidated|inconsistent|read-error] [--format text|json]\n       legion-cli platform-profile [--scenario valid|active-only|missing-active|empty-active|empty-choices|unknown|duplicate|inconsistent|malformed] [--format text|json]\n       legion-cli fan-rpm [--scenario quirk-two-channel|one-channel|zero-generic|read-error|duplicate-source|device-disappeared|missing-device|invalid-rpm] [--format text|json]\n       legion-cli wmi [--scenario valid|unavailable|inconsistent-buffer|unsupported] [--format text|json]\nCurve editor: legion-cli curve --help\nStatus: legion-cli status [--format text|json] (one real read-only snapshot)\nOther diagnostics are embedded/simulated; curve documents use explicit local regular files. No hardware controls.".into())
             }
             other => return Err(format!("unsupported argument: {other}")),
         }

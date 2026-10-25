@@ -651,41 +651,7 @@ pub fn run_simulated_rehearsal(
 /// Strict parser for the fixed NVIDIA query: exactly one RTX 4060 Laptop GPU,
 /// PCI identity plus integer Celsius. Acquisition recency is timed separately;
 /// NVIDIA does not expose a silicon sample timestamp in this output.
-pub fn parse_nvidia_temperature(bytes: &[u8]) -> Result<(String, f64), String> {
-    if bytes.len() > 512 || !bytes.is_ascii() {
-        return Err("NVIDIA output too large".into());
-    }
-    let text = std::str::from_utf8(bytes).map_err(|e| e.to_string())?;
-    let line = text.strip_suffix('\n').unwrap_or(text);
-    if line.chars().any(|c| c.is_control()) {
-        return Err("NVIDIA output has extra lines/control characters".into());
-    }
-    let fields: Vec<_> = line.split(',').map(str::trim).collect();
-    if fields.len() != 3 || fields[1] != "NVIDIA GeForce RTX 4060 Laptop GPU" {
-        return Err("exactly one identified RTX 4060 Laptop GPU required".into());
-    }
-    let pci = fields[0];
-    let parts: Vec<_> = pci.split(':').collect();
-    let hex = |s: &str, n: usize| s.len() == n && s.bytes().all(|b| b.is_ascii_hexdigit());
-    if parts.len() != 3
-        || !(hex(parts[0], 4) || hex(parts[0], 8))
-        || !hex(parts[1], 2)
-        || parts[2].len() != 4
-        || parts[2].as_bytes()[2] != b'.'
-        || !hex(&parts[2][..2], 2)
-        || !matches!(parts[2].as_bytes()[3], b'0'..=b'7')
-    {
-        return Err("invalid NVIDIA PCI identity".into());
-    }
-    if fields[2].is_empty() || !fields[2].bytes().all(|c| c.is_ascii_digit()) {
-        return Err("NVIDIA temperature unavailable or malformed".into());
-    }
-    let temperature = fields[2].parse::<u32>().map_err(|e| e.to_string())?;
-    if !(5..=110).contains(&temperature) {
-        return Err("GPU temperature outside trial range".into());
-    }
-    Ok((pci.to_ascii_lowercase(), f64::from(temperature)))
-}
+pub use crate::nvidia::parse_nvidia_temperature;
 
 #[cfg(test)]
 mod tests {

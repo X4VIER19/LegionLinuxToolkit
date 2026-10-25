@@ -6,8 +6,6 @@ use legion_core::{
     ValueClassification,
 };
 use std::{
-    io::Read,
-    process::{Command, Stdio},
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc,
@@ -31,26 +29,6 @@ impl LiveSource {
             .map_err(|e| e.to_string())?;
         if !crate::hwmon_real::is_exact_target_identity(&dmi.identity) {
             return Err("exact 83EX/NUCN15WW identity required".into());
-        }
-        // Metadata checks only. Never load NVIDIA or a FullSpeed module.
-        use std::os::unix::fs::FileTypeExt;
-        if !std::fs::symlink_metadata("/dev/nvidiactl")
-            .is_ok_and(|m| m.file_type().is_char_device())
-        {
-            return Err(
-                "existing NVIDIA device node required; do not create nodes or run nvidia-modprobe"
-                    .into(),
-            );
-        }
-        if !std::fs::metadata("/sys/module/nvidia").is_ok_and(|m| m.is_dir()) {
-            return Err(
-                "NVIDIA driver must already be loaded; no automatic installation/loading".into(),
-            );
-        }
-        let binary = std::fs::symlink_metadata("/usr/bin/nvidia-smi").map_err(|e| e.to_string())?;
-        use std::os::unix::fs::MetadataExt;
-        if !binary.is_file() || binary.uid() != 0 || binary.mode() & 0o022 != 0 {
-            return Err("fixed /usr/bin/nvidia-smi must be a regular installed binary".into());
         }
         use rustix::fs::{CWD, FileType, Mode, OFlags, ResolveFlags, fstat, openat2};
         let endpoint = openat2(
@@ -137,53 +115,7 @@ impl LiveSource {
     }
 }
 
-/// Fixed executable/arguments, cleared environment, bounded child lifetime and
-/// output. No shell, PATH lookup, fallback, installation or automatic retry.
-fn nvidia_once() -> Result<Vec<u8>, String> {
-    let mut child = Command::new("/usr/bin/nvidia-smi")
-        .args([
-            "--query-gpu=pci.bus_id,name,temperature.gpu",
-            "--format=csv,noheader,nounits",
-        ])
-        .env_clear()
-        .env("LC_ALL", "C")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|e| format!("NVIDIA query spawn failed: {e}"))?;
-    let started = Instant::now();
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) if started.elapsed() < Duration::from_millis(1000) => {
-                thread::sleep(Duration::from_millis(10))
-            }
-            result => {
-                let kill = child.kill();
-                let reap = child.wait();
-                return Err(format!(
-                    "NVIDIA query timeout/wait error {result:?}; kill={kill:?}, reap={reap:?}; no retry"
-                ));
-            }
-        }
-    };
-    if !status.success() {
-        return Err(format!("NVIDIA query exit {status}; no cached fallback"));
-    }
-    let mut bytes = Vec::new();
-    child
-        .stdout
-        .take()
-        .ok_or("NVIDIA output pipe missing")?
-        .take(513)
-        .read_to_end(&mut bytes)
-        .map_err(|e| e.to_string())?;
-    if bytes.len() > 512 {
-        return Err("NVIDIA query output exceeds 512 bytes".into());
-    }
-    Ok(bytes)
-}
+use crate::nvidia::nvidia_once;
 
 /// The monitor remains independent of the writer, with a bounded worker wait.
 /// A kernel read stuck in D-state cannot be cancelled safely; no forced module

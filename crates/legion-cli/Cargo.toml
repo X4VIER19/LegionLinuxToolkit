@@ -7,11 +7,11 @@ authors.workspace = true
 
 [features]
 experimental-fan-trial-monitor = ["experimental-fan-control-preflight", "legion-linux/experimental-fan-trial-monitor"]
-# Opt-in forwarding only. Normal legion-cli builds retain exclusively
-# simulated sources and cannot compile the experimental real-read binary.
+# Opt-in forwarding for the separate experimental real-read binary.
+# Ordinary `status` uses only the dedicated Linux read-only status feature.
 approved-real-platform-profile-read = ["legion-linux/approved-real-platform-profile-read"]
 # This forwards only to a separately named experimental binary. The default
-# `legion-cli` remains simulated-only and cannot acquire host hwmon data.
+# Other diagnostics remain simulated; only explicit `status` acquires hwmon.
 approved-real-hwmon-rpm-read = ["legion-linux/approved-real-hwmon-rpm-read"]
 experimental-fan-control-preflight = ["legion-linux/experimental-fan-control-plan"]
 experimental-fan-full-speed-read = ["legion-linux/experimental-fan-full-speed-read"]
@@ -45,7 +45,7 @@ required-features = ["approved-real-hwmon-rpm-read"]
 legion-core = { path = "../legion-core" }
 legion-fan = { path = "../legion-fan" }
 legion-fixtures = { path = "../legion-fixtures" }
-legion-linux = { path = "../legion-linux" }
+legion-linux = { path = "../legion-linux", features = ["linux-status"] }
 serde.workspace = true
 serde_json.workspace = true
 
