@@ -8,6 +8,7 @@ authors.workspace = true
 [dependencies]
 eframe.workspace = true
 legion-core = { path = "../legion-core" }
+legion-fan = { path = "../legion-fan" }
 legion-linux = { path = "../legion-linux", features = ["linux-status"] }
 
 [lints]

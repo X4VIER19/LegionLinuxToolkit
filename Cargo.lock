@@ -1183,6 +1183,7 @@ version = "0.1.0"
 dependencies = [
  "legion-core",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1198,6 +1199,7 @@ version = "0.1.0"
 dependencies = [
  "eframe",
  "legion-core",
+ "legion-fan",
  "legion-linux",
 ]
 

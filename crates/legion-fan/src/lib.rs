@@ -23,6 +23,7 @@ mod fan_get_table;
 mod fan_get_table_abi;
 mod kernel_contract;
 mod kernel_endpoint;
+pub mod offline_curve;
 mod wmi_adapter;
 mod wmi_schema;
 
@@ -48,6 +49,10 @@ pub use kernel_contract::{
 pub use kernel_endpoint::{
     DecodedKernelFanEndpointResponse, FAN_KERNEL_ENDPOINT_RESPONSE_SIZE_BYTES,
     KernelFanEndpointError, consume_simulated_kernel_endpoint_bytes, decode_kernel_endpoint_bytes,
+};
+pub use offline_curve::{
+    CURVE_HARDWARE, CURVE_RULES, CURVE_SCHEMA_VERSION, OfflineCurveFile, OfflineCurvePreview,
+    OfflineCurvePreviewPoint, preview_83ex_fnt0,
 };
 pub use wmi_adapter::{
     FanTableWmiAdapter, FanTableWmiError, FanTableWmiEvidenceError, SimulatedFanTableWmiResult,

@@ -25,6 +25,23 @@ otras funciones de hardware de los equipos Lenovo Legion.
 
 *Proyecto en pausa. Desarrollo pendiente de continuación.*
 
+## Interfaz gráfica experimental
+
+El workspace incluye `legion-gui`, una ventana nativa de solo lectura con un
+dashboard de CPU, GPU, alimentación, perfil y RPM disponibles. También integra
+un editor **offline** de curvas LLT V2/FNT0: valida, importa y exporta el JSON
+versionado existente y previsualiza su payload de 64 bytes, pero no puede
+enviarlo al hardware.
+
+Para iniciarla manualmente en Nobara:
+
+```bash
+cargo run --locked --offline -p legion-gui
+```
+
+El control de hardware permanece bloqueado; la interfaz no cambia perfiles,
+no carga módulos ni invoca métodos WMI/EC de control.
+
 ## Equipo objetivo inicial
 
 | Componente | Valor |

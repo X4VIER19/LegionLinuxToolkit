@@ -1,105 +1,11 @@
 //! Local-only curve documents and embedded catalogue preview. No transport.
-use legion_fan::{
-    AmlCatalogueValue, AmlFanCurveCatalogues,
-    control_payload::{CurveRules, OfflineCurveProposal},
-};
-use serde::{Deserialize, Serialize};
+use legion_fan::{OfflineCurveFile, preview_83ex_fnt0};
 use std::path::Path;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-struct CurveFile {
-    schema_version: u32,
-    hardware: String,
-    rules: String,
-    indices: [u16; 10],
-}
-impl CurveFile {
-    fn new(indices: [u16; 10]) -> Self {
-        Self {
-            schema_version: 1,
-            hardware: "83EX/NUCN15WW".into(),
-            rules: "LLT-GodMode-V2".into(),
-            indices,
-        }
-    }
-    fn validate(&self) -> Result<OfflineCurveProposal, String> {
-        if self.schema_version != 1
-            || self.hardware != "83EX/NUCN15WW"
-            || self.rules != "LLT-GodMode-V2"
-        {
-            return Err("unsupported curve version, hardware or rules".into());
-        }
-        OfflineCurveProposal::new(self.indices, CurveRules::DeclaredLltV2ToV4)
-            .map_err(|e| format!("invalid LLT V2 curve: {e:?}"))
-    }
-}
-
-#[derive(Deserialize)]
-struct Reference {
-    source: String,
-    fnt0: [Vec<u32>; 3],
-    fi02: [[u32; 22]; 3],
-}
-
-#[derive(Serialize)]
-struct Point {
-    point: usize,
-    index: u16,
-    nominal_rpm: u32,
-    fnt0_sensor4: u32,
-    fnt0_sensor5: u32,
-    cpu_cl_ct_raw: [u32; 2],
-    gpu_gl_gt_raw: [u32; 2],
-}
-
-fn points(proposal: &OfflineCurveProposal) -> Result<(String, Vec<Point>), String> {
-    let reference: Reference = serde_json::from_str(include_str!("../data/83ex-fnt0-fi02.json"))
-        .map_err(|e| e.to_string())?;
-    if reference.fnt0.iter().any(|package| package.len() != 35) {
-        return Err("embedded FNT0 package must retain all 35 fields".into());
-    }
-    // Only the three preserved packages are present, not invented replacements
-    // for the other DSDT packages. preview_fnt0 reads package 9 exclusively.
-    let mut fnt0 = vec![vec![]; 9];
-    fnt0.extend(reference.fnt0.iter().map(|values| {
-        values
-            .iter()
-            .map(|&value| AmlCatalogueValue {
-                original: value.to_string(),
-                value,
-            })
-            .collect()
-    }));
-    let catalogues = AmlFanCurveCatalogues {
-        fnt: vec![fnt0],
-        fi: vec![],
-    };
-    let preview = proposal
-        .preview_fnt0(&catalogues)
-        .map_err(|e| e.to_string())?;
-    let points = (0..10)
-        .map(|i| Point {
-            point: i + 1,
-            index: proposal.indices()[i],
-            nominal_rpm: preview[i].original_catalogue_value.value,
-            // Temperature-axis catalogue entries belong to point POSITION,
-            // not to its chosen RPM index. Do not shift thresholds with indices.
-            fnt0_sensor4: reference.fnt0[0][15 + i],
-            fnt0_sensor5: reference.fnt0[1][15 + i],
-            cpu_cl_ct_raw: [reference.fi02[0][i], reference.fi02[0][i + 10]],
-            gpu_gl_gt_raw: [reference.fi02[1][i], reference.fi02[1][i + 10]],
-        })
-        .collect();
-    Ok((reference.source, points))
-}
-
-fn load(path: &Path) -> Result<CurveFile, String> {
+fn load(path: &Path) -> Result<OfflineCurveFile, String> {
     let path = std::path::absolute(path).map_err(|e| e.to_string())?;
     let bytes = legion_linux::read_offline_regular_file(&path, 4096).map_err(|e| e.to_string())?;
-    let curve: CurveFile = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-    curve.validate()?;
-    Ok(curve)
+    OfflineCurveFile::from_json(&bytes)
 }
 
 pub(super) fn run(args: &[String]) -> Result<String, String> {
@@ -116,7 +22,7 @@ pub(super) fn run(args: &[String]) -> Result<String, String> {
                 let values = args.next().ok_or("--indices requires ten comma-separated integers")?
                     .split(',').map(|v| v.trim().parse::<u16>().map_err(|_| "invalid index".to_owned()))
                     .collect::<Result<Vec<_>, _>>()?;
-                curve = Some(CurveFile::new(values.try_into().map_err(|_| "exactly ten indices required")?));
+                curve = Some(OfflineCurveFile::new(values.try_into().map_err(|_| "exactly ten indices required")?));
             }
             "--open" => {
                 if curve.is_some() { return Err("choose exactly one --indices or --open".into()); }
@@ -136,26 +42,25 @@ pub(super) fn run(args: &[String]) -> Result<String, String> {
     }
     let curve = curve.ok_or("provide --indices or --open")?;
     let proposal = curve.validate()?;
-    let (source, points) = points(&proposal)?;
+    let preview = preview_83ex_fnt0(&proposal)?;
     let bytes = proposal.payload();
     if let Some(path) = save {
         let path = std::path::absolute(path).map_err(|e| e.to_string())?;
-        let mut json = serde_json::to_vec_pretty(&curve).map_err(|e| e.to_string())?;
-        json.push(b'\n');
-        legion_linux::save_offline_curve_json(&path, &json)?;
+        legion_linux::save_offline_curve_json(&path, &curve.to_pretty_json()?)?;
     }
     if format == "json" {
         return serde_json::to_string_pretty(&serde_json::json!({
             "source":"offline-curve-simulation", "execution_enabled":false,
-            "curve":curve, "catalogue_source":source, "points":points,
+            "curve":curve, "catalogue_source":preview.source, "points":preview.points,
             "payload_simulation":if payload { Some(bytes.to_vec()) } else { None },
             "notice":"Nominal RPM only. Thresholds are recovered raw catalogue values, not measured temperatures or verified physical fan mapping. No write authorization."
         })).map_err(|e| e.to_string());
     }
     let mut text = format!(
-        "OFFLINE / SIMULATION — LLT GodMode V2 — 83EX/NUCN15WW\n{source}\nPoint Index NominalRPM FNT0-S4 FNT0-S5 CPU(CL/CT) GPU(GL/GT)\n"
+        "OFFLINE / SIMULATION — LLT GodMode V2 — 83EX/NUCN15WW\n{}\nPoint Index NominalRPM FNT0-S4 FNT0-S5 CPU(CL/CT) GPU(GL/GT)\n",
+        preview.source
     );
-    for p in points {
+    for p in preview.points {
         text.push_str(&format!(
             "{:>5} {:>5} {:>10} {:>7} {:>7} {:>4}/{:<4} {:>4}/{:<4}\n",
             p.point,
@@ -232,18 +137,14 @@ mod tests {
         assert!(invoke(&["--real"]).is_err());
         assert!(invoke(&["--open", "/sys/firmware/acpi/platform_profile"]).is_err());
         let example = include_str!("../../../examples/curves/83ex-default-v1.json");
-        let curve: CurveFile = serde_json::from_str(example).unwrap();
-        assert!(curve.validate().is_ok());
+        assert!(OfflineCurveFile::from_json(example.as_bytes()).is_ok());
         let wrong_version = example.replace("\"schema_version\": 1", "\"schema_version\": 2");
+        assert!(OfflineCurveFile::from_json(wrong_version.as_bytes()).is_err());
         assert!(
-            serde_json::from_str::<CurveFile>(&wrong_version)
-                .unwrap()
-                .validate()
-                .is_err()
-        );
-        assert!(
-            serde_json::from_str::<CurveFile>(
-                &example.replace("\"indices\":", "\"apply\": true, \"indices\":")
+            OfflineCurveFile::from_json(
+                example
+                    .replace("\"indices\":", "\"apply\": true, \"indices\":")
+                    .as_bytes()
             )
             .is_err()
         );
