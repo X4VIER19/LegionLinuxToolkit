@@ -34,8 +34,86 @@ pub struct SimulatedControlPreflight {
     method_id: u32,
     payload: Vec<u8>,
     checks: Vec<ControlPreflightCheck>,
+    windows_reference: WindowsV2Reference,
+    windows_reference_consistent: bool,
+    linux_metadata_capture: Option<LinuxMetadataCapture>,
     execution_enabled: bool,
     remaining_execution_blocks: [&'static str; 3],
+}
+
+/// Historical observations supplied by the owner, never current Linux state.
+#[derive(Debug, Serialize)]
+pub struct WindowsV2Reference {
+    source: &'static str,
+    smart_fan_version: u8,
+    legion_zone_version: u8,
+    controller: &'static str,
+    supported_power_modes: u32,
+    god_mode_fn_q_switchable: bool,
+    fan_full_speed_at_capture: bool,
+    catalogue_mode: u16,
+    catalogue_coordinates: [(u8, u8); 3],
+    nominal_rpm: [u16; 10],
+    software_minima: [u16; 10],
+    default_indices: [u16; 10],
+    manual_default_applications: u8,
+    observed_rpm_range: [u16; 2],
+    rollback_validated: bool,
+}
+
+fn windows_v2_reference() -> WindowsV2Reference {
+    WindowsV2Reference {
+        source: "owner-reported-windows-observation-LLT-2.34.0; historical-only",
+        smart_fan_version: 7,
+        legion_zone_version: 4,
+        controller: "GodMode V2",
+        supported_power_modes: 0x0001001f,
+        god_mode_fn_q_switchable: true,
+        fan_full_speed_at_capture: false,
+        catalogue_mode: 255,
+        catalogue_coordinates: [(1, 4), (2, 5), (1, 1)],
+        nominal_rpm: [0, 1700, 1900, 2100, 2400, 2900, 3200, 3500, 3800, 5000],
+        software_minima: legion_fan::control_payload::LLT_V2_V4_MINIMA,
+        default_indices: legion_fan::control_payload::DEFAULT_INDICES,
+        manual_default_applications: 2,
+        observed_rpm_range: [1700, 2400],
+        rollback_validated: false,
+    }
+}
+
+impl WindowsV2Reference {
+    /// Internal consistency of this recorded LLT V2 observation only. This
+    /// does not check live capabilities or establish physical RPM semantics.
+    fn validate(&self) -> bool {
+        self.smart_fan_version == 7
+            && self.legion_zone_version == 4
+            && self.controller == "GodMode V2"
+            && self.catalogue_mode == 255
+            && self.catalogue_coordinates == [(1, 4), (2, 5), (1, 1)]
+            && self.supported_power_modes == 0x0001001f
+            && self.god_mode_fn_q_switchable
+            && self.nominal_rpm.windows(2).all(|pair| pair[0] <= pair[1])
+            && self.software_minima == legion_fan::control_payload::LLT_V2_V4_MINIMA
+            && self.default_indices == legion_fan::control_payload::DEFAULT_INDICES
+            && OfflineCurveProposal::new(
+                self.default_indices,
+                legion_fan::control_payload::CurveRules::DeclaredLltV2ToV4,
+            )
+            .is_ok()
+    }
+}
+
+/// Recorded passive metadata, not a live collector or a real-read capability.
+/// Public input remains untrusted and cannot enable execution. No RPM or
+/// temperature measurements are inferred from readable source paths.
+#[derive(Debug, Serialize)]
+pub struct LinuxMetadataCapture {
+    pub observed_date: &'static str,
+    pub source: &'static str,
+    pub platform_profile: &'static str,
+    pub ac_online: bool,
+    pub rpm_sources: Vec<&'static str>,
+    pub thermal_sources: Vec<&'static str>,
 }
 
 impl SimulatedControlPreflight {
@@ -53,7 +131,12 @@ impl SimulatedControlPreflight {
             .collect::<Vec<_>>()
             .join(" ");
         format!(
-            "Static simulation; no host observations\nGUID={} instance={} MethodId={}\nPayload ({} bytes): {hex}\n{checks}\nExecution enabled: false\nBlocks: {}",
+            "Source: {}\nWindows reference (historical): SmartFan={} LegionZone={} {}; FanFullSpeed=false at Windows capture only\nLinux metadata capture: {:?}\nGUID={} instance={} MethodId={}\nPayload ({} bytes): {hex}\n{checks}\nExecution enabled: false\nBlocks: {}",
+            self.source,
+            self.windows_reference.smart_fan_version,
+            self.windows_reference.legion_zone_version,
+            self.windows_reference.controller,
+            self.linux_metadata_capture,
             self.guid,
             self.instance,
             self.method_id,
@@ -140,6 +223,9 @@ pub fn simulated_control_preflight(
         method_id: plan.method_id(),
         payload: plan.payload().to_vec(),
         checks,
+        windows_reference: windows_v2_reference(),
+        windows_reference_consistent: windows_v2_reference().validate(),
+        linux_metadata_capture: None,
         execution_enabled: plan.execution_enabled(),
         remaining_execution_blocks: [
             "kernel constant false and no write endpoint",
@@ -147,6 +233,54 @@ pub fn simulated_control_preflight(
             "separate authorization and approved partial-write recovery required",
         ],
     }
+}
+
+/// Reuses the same preflight with a recorded Linux capture. Historical Windows
+/// evidence satisfies only reference requirements, never current Linux checks.
+pub fn recorded_control_preflight(
+    registry: &CompatibilityRegistry,
+    identity: &HostIdentity,
+    capture: LinuxMetadataCapture,
+) -> SimulatedControlPreflight {
+    let mut report = simulated_control_preflight(
+        registry,
+        SimulatedControlPreconditions {
+            identity,
+            platform_profile: None,
+            gz44: None,
+            fan_full_speed: None,
+            llt_controller: None,
+            validated_rpm_channels: None,
+            validated_thermal_sources: None,
+            catalogue_selection_known: None,
+            ac_connected: None,
+            windows_recovery_rehearsed: None,
+        },
+    );
+    report.source = "recorded-evidence; not-live; no-execution-authority";
+    // Identity was supplied from the recorded DMI capture; this remains a
+    // record of that observation, not verification of the current host.
+    if report.checks[0].status == "satisfied-in-simulation-only" {
+        report.checks[0].status = "matched-at-recorded-linux-capture";
+    }
+    report.checks[1].status = if capture.platform_profile == "custom" {
+        "custom-at-capture; GZ44-not-observed"
+    } else {
+        "blocked-profile-not-custom-at-capture"
+    };
+    report.checks[3].status = if report.windows_reference_consistent {
+        "V2-confirmed-in-historical-windows-reference"
+    } else {
+        "blocked-inconsistent-Windows-reference"
+    };
+    report.checks[7].status = if capture.ac_online {
+        "AC-online-at-recorded-capture"
+    } else {
+        "blocked-AC-offline-at-capture"
+    };
+    report.checks[8].status = "Windows-default-reapplied; partial-write-rollback-unproven";
+    report.linux_metadata_capture = Some(capture);
+    report
 }
 
 /// Immutable offline description sharing the read transport's target/instance.
@@ -190,5 +324,18 @@ mod tests {
         assert_eq!(plan.instance(), 0);
         assert_eq!(plan.payload().len(), 64);
         assert!(!plan.execution_enabled());
+    }
+
+    #[test]
+    fn validates_v2_reference_without_inventing_rollback_or_live_state() {
+        let mut reference = windows_v2_reference();
+        assert!(reference.validate());
+        assert!(!reference.rollback_validated);
+        assert_eq!(reference.manual_default_applications, 2);
+        reference.smart_fan_version = 8;
+        assert!(!reference.validate());
+        reference.smart_fan_version = 7;
+        reference.nominal_rpm[3] = 1;
+        assert!(!reference.validate());
     }
 }
