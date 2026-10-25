@@ -13,6 +13,7 @@
 
 #include <linux/acpi.h>
 #include <linux/errno.h>
+#include <linux/dmi.h>
 #include <linux/fs.h>
 #include <linux/kconfig.h>
 #include <linux/miscdevice.h>
@@ -25,6 +26,7 @@
 #include <linux/wmi.h>
 
 #include "legion_fan_read_contract.h"
+#include "control_policy.h"
 
 #define LENOVO_FAN_WMI_GUID "92549549-4BDE-4F06-AC04-CE8BF898DBAA"
 #define LENOVO_FAN_WMI_INSTANCE 0
@@ -104,6 +106,61 @@ static struct wmi_driver legion_fan_wmi_driver = {
 	.probe = legion_fan_wmi_probe,
 	.remove = legion_fan_wmi_remove,
 };
+
+#if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI_CONTROL_STAGING)
+/* No setter, module parameter, endpoint or caller exists for this barrier.
+ * Enabling it requires a new reviewed code change, not a load-time argument.
+ */
+static const bool legion_control_execution_authorized = false;
+static atomic_t legion_control_attempted = ATOMIC_INIT(0);
+
+/* Metadata must eventually come from independently validated observation;
+ * caller assertions alone must never authorize execution. Currently uncalled.
+ */
+static int __maybe_unused legion_fan_default_control_staged(
+ const u8 *payload, size_t size, int gz44, int full_speed)
+{
+ struct acpi_buffer input = { .length = 64, .pointer = (void *)payload };
+ struct acpi_buffer output = { .length = ACPI_ALLOCATE_BUFFER };
+ union acpi_object *object;
+ acpi_status status;
+ int error = 0;
+
+ if (!legion_control_execution_authorized)
+  return -EOPNOTSUPP;
+ error = legion_control_policy(payload, size,
+  dmi_match(DMI_SYS_VENDOR, "LENOVO") &&
+  dmi_match(DMI_PRODUCT_NAME, "83EX") &&
+  dmi_match(DMI_PRODUCT_VERSION, "Legion Slim 5 16ARP9") &&
+  dmi_match(DMI_BIOS_VERSION, "NUCN15WW"), gz44, full_speed);
+ if (error)
+  return error;
+ if (atomic_cmpxchg(&legion_control_attempted, 0, 1))
+  return -EALREADY;
+ mutex_lock(&legion_fan_wmi_lock);
+ if (!legion_fan_wmi_device) {
+  error = -ENODEV;
+  goto unlock_control;
+ }
+ status = wmidev_evaluate_method(legion_fan_wmi_device,
+  LENOVO_FAN_WMI_INSTANCE, 6, &input, &output);
+ if (ACPI_FAILURE(status)) {
+  error = -EIO;
+  goto free_control;
+ }
+ object = output.pointer;
+ /* WMAB returns Integer(0), including on a skipped SFAN. This validates
+  * only the response shape and is NOT proof of successful application.
+  */
+ if (!object || object->type != ACPI_TYPE_INTEGER || object->integer.value)
+  error = -EPROTO;
+free_control:
+ kfree(output.pointer);
+unlock_control:
+ mutex_unlock(&legion_fan_wmi_lock);
+ return error;
+}
+#endif
 
 #if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI_REAL_READ)
 static void legion_fan_response_init(struct legion_fan_read_response_v1 *response)
