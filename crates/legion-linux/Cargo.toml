@@ -24,6 +24,7 @@ approved-real-hwmon-rpm-read = ["approved-real-dmi-identity-read"]
 experimental-fan-wmi-transport = []
 # Offline MethodId 6 plan only; no callable write transport or host endpoint.
 experimental-fan-control-plan = ["experimental-fan-wmi-transport"]
+experimental-fan-full-speed-read = ["experimental-fan-control-plan"]
 # Builds a planning-only entry point. It cannot invoke the transport or reach
 # a host WMI device, and is never enabled by default.
 experimental-fan-wmi-read = ["experimental-fan-wmi-transport"]

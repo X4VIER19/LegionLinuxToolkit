@@ -37,6 +37,7 @@ pub struct SimulatedControlPreflight {
     windows_reference: WindowsV2Reference,
     windows_reference_consistent: bool,
     linux_metadata_capture: Option<LinuxMetadataCapture>,
+    full_speed_observation: Option<crate::fan_full_speed::FullSpeedObservation>,
     execution_enabled: bool,
     remaining_execution_blocks: [&'static str; 3],
 }
@@ -117,6 +118,26 @@ pub struct LinuxMetadataCapture {
 }
 
 impl SimulatedControlPreflight {
+    /// Adds one independently acquired observation. It does not upgrade other
+    /// preconditions, historical evidence, identity, or execution authority.
+    pub fn with_full_speed_observation(
+        mut self,
+        observation: crate::fan_full_speed::FullSpeedObservation,
+    ) -> Self {
+        use legion_fan::fan_full_speed::FanFullSpeedState;
+        if observation.source().starts_with("linux-wmi-one-shot") {
+            self.source = "partial-live-preflight; only-FanFullSpeed-collected; other-checks-retain-their-source";
+        }
+        self.checks[2].status = match (observation.source(), observation.result().state) {
+            ("static-simulation", FanFullSpeedState::Disabled) => "disabled-in-simulation-only",
+            (_, FanFullSpeedState::Disabled) => "disabled-at-single-linux-WMI-observation",
+            (_, FanFullSpeedState::Enabled) => "blocked-enabled",
+            (_, FanFullSpeedState::Unknown) => "blocked-unknown",
+            (_, FanFullSpeedState::Error) => "blocked-query-error",
+        };
+        self.full_speed_observation = Some(observation);
+        self
+    }
     pub fn text(&self) -> String {
         let checks = self
             .checks
@@ -131,12 +152,13 @@ impl SimulatedControlPreflight {
             .collect::<Vec<_>>()
             .join(" ");
         format!(
-            "Source: {}\nWindows reference (historical): SmartFan={} LegionZone={} {}; FanFullSpeed=false at Windows capture only\nLinux metadata capture: {:?}\nGUID={} instance={} MethodId={}\nPayload ({} bytes): {hex}\n{checks}\nExecution enabled: false\nBlocks: {}",
+            "Source: {}\nWindows reference (historical): SmartFan={} LegionZone={} {}; FanFullSpeed=false at Windows capture only\nLinux metadata capture: {:?}\nFanFullSpeed observation: {:?}\nGUID={} instance={} MethodId={}\nPayload ({} bytes): {hex}\n{checks}\nExecution enabled: false\nBlocks: {}",
             self.source,
             self.windows_reference.smart_fan_version,
             self.windows_reference.legion_zone_version,
             self.windows_reference.controller,
             self.linux_metadata_capture,
+            self.full_speed_observation,
             self.guid,
             self.instance,
             self.method_id,
@@ -171,10 +193,11 @@ pub fn simulated_control_preflight(
     };
     add(
         "DMI/profile exact match in existing registry",
-        Some(matches!(
-            registry.match_query(&query),
-            MatchResult::Exact { .. }
-        )),
+        match registry.match_query(&query) {
+            MatchResult::Exact { .. } => Some(true),
+            MatchResult::Incomplete { .. } => None,
+            _ => Some(false),
+        },
     );
     add(
         "Custom platform profile and GZ44=3 agree",
@@ -226,6 +249,7 @@ pub fn simulated_control_preflight(
         windows_reference: windows_v2_reference(),
         windows_reference_consistent: windows_v2_reference().validate(),
         linux_metadata_capture: None,
+        full_speed_observation: None,
         execution_enabled: plan.execution_enabled(),
         remaining_execution_blocks: [
             "kernel constant false and no write endpoint",
@@ -337,5 +361,46 @@ mod tests {
         reference.smart_fan_version = 7;
         reference.nominal_rpm[3] = 1;
         assert!(!reference.validate());
+    }
+
+    #[test]
+    fn full_speed_states_never_enable_write_and_keep_simulation_provenance() {
+        let identity =
+            legion_fixtures::simulated_host_identity(legion_fixtures::HostIdentityScenario::Exact)
+                .unwrap();
+        for (integer, status, expected) in [
+            (0u64, 0u8, "disabled-in-simulation-only"),
+            (1, 0, "blocked-enabled"),
+            (9, 0, "blocked-unknown"),
+            (0, 2, "blocked-query-error"),
+        ] {
+            let mut bytes = [0; 20];
+            bytes[0] = 1;
+            bytes[2] = 12;
+            bytes[4] = status;
+            bytes[8] = 8;
+            bytes[12..].copy_from_slice(&integer.to_le_bytes());
+            let report = recorded_control_preflight(
+                &legion_fixtures::legion_slim_5_16arp9_registry(),
+                &identity,
+                LinuxMetadataCapture {
+                    observed_date: "fixture",
+                    source: "static-simulation",
+                    platform_profile: "custom",
+                    ac_online: true,
+                    rpm_sources: vec![],
+                    thermal_sources: vec![],
+                },
+            )
+            .with_full_speed_observation(
+                crate::fan_full_speed::FullSpeedObservation::simulation(&bytes),
+            );
+            assert_eq!(report.checks[2].status, expected);
+            assert!(!report.execution_enabled);
+            assert_eq!(
+                report.full_speed_observation.unwrap().source(),
+                "static-simulation"
+            );
+        }
     }
 }

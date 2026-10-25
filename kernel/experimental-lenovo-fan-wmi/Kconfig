@@ -15,6 +15,15 @@ config LEGION_LINUX_EXPERIMENTAL_FAN_WMI
 	  explicitly authorizes both a kernel integration and a one-shot read-only
 	  Fan_Get_Table experiment for the documented machine and BIOS.
 
+config LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ
+	bool "Explicit one-shot GetFeatureValue FanFullSpeed observation"
+	depends on LEGION_LINUX_EXPERIMENTAL_FAN_WMI && ACPI_WMI
+	default n
+	help
+	  Adds only a fixed MethodId 17 query, gated by runtime confirmation.
+	  Never invokes firmware during init/probe/remove. Does not force binding
+	  to devices owned by another driver. No setters or curve activation.
+
 config LEGION_LINUX_EXPERIMENTAL_FAN_WMI_CONTROL_STAGING
 	bool "Compile inaccessible default-curve transport staging"
 	depends on LEGION_LINUX_EXPERIMENTAL_FAN_WMI && ACPI_WMI

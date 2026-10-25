@@ -13,6 +13,12 @@ approved-real-platform-profile-read = ["legion-linux/approved-real-platform-prof
 # `legion-cli` remains simulated-only and cannot acquire host hwmon data.
 approved-real-hwmon-rpm-read = ["legion-linux/approved-real-hwmon-rpm-read"]
 experimental-fan-control-preflight = ["legion-linux/experimental-fan-control-plan"]
+experimental-fan-full-speed-read = ["legion-linux/experimental-fan-full-speed-read"]
+
+[[bin]]
+name = "legion-cli-fan-full-speed-read"
+path = "src/bin/legion-cli-fan-full-speed-read.rs"
+required-features = ["experimental-fan-full-speed-read"]
 
 [[bin]]
 name = "legion-cli-fan-control-preflight"

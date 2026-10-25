@@ -28,6 +28,7 @@ use std::{
 
 #[cfg(any(test, feature = "experimental-fan-control-plan"))]
 pub mod fan_control_transport;
+pub mod fan_full_speed;
 mod host_identity;
 mod hwmon;
 #[cfg(any(test, feature = "approved-real-hwmon-rpm-read"))]
