@@ -32,7 +32,7 @@ for file in "$quirk" "$helper" "$monitor"; do
 done
 sha256sum --check --strict <<< "a67312115691a71c0934a24185b629b38eeed2f15fb2ca27d4db7d3e71e2faa5  $quirk
 9595c09f69e84bb472e4a33ee4deb54a42a92b5e76bdfc7a09714df8aa8bc6da  $helper
-cfa6c3610fc84c8695163cf220e089950d8cb04795ae1c3209951ddcaacc637a  $monitor"
+020fbfd6648aa941a700b002fa6305b17613852735083789ab3300ccab5a7ad0  $monitor"
 [[ -x $monitor ]] || die 'Monitor not executable.'
 [[ $(modinfo -F name "$quirk") == yogafan_83ex ]] || die 'Quirk name mismatch.'
 [[ $(modinfo -F name "$helper") == legion_lenovo_fan_wmi ]] || die 'Helper name mismatch.'

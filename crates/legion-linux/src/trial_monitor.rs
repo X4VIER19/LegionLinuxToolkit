@@ -102,8 +102,8 @@ fn supervise(
     let mut post_anchor = None;
     let mut baseline: Option<Frame> = None;
     let mut fingerprint = None;
-    let mut cpu_bounds = (f64::INFINITY, f64::NEG_INFINITY);
-    let mut gpu_bounds = cpu_bounds;
+    let mut cpu_minimum = f64::INFINITY;
+    let mut gpu_minimum = f64::INFINITY;
     log(&event(
         "start-no-write-rehearsal",
         0,
@@ -216,11 +216,13 @@ fn supervise(
         if index <= 60 {
             let cpu = frame.cpu.value.ok_or("CPU missing")?;
             let gpu = frame.gpu.value.ok_or("GPU missing")?;
-            cpu_bounds = (cpu_bounds.0.min(cpu), cpu_bounds.1.max(cpu));
-            gpu_bounds = (gpu_bounds.0.min(gpu), gpu_bounds.1.max(gpu));
-            if cpu_bounds.1 - cpu_bounds.0 > 3.0 || gpu_bounds.1 - gpu_bounds.0 > 3.0 {
-                return Err("baseline not stable: temperature span exceeds 3 C; do not restart automatically".into());
+            // Reject warming from a previously observed minimum, not cooling
+            // from an earlier maximum. Absolute limits were checked above.
+            if cpu - cpu_minimum > 3.0 || gpu - gpu_minimum > 3.0 {
+                return Err("baseline not stable: temperature rise exceeds 3 C from a prior minimum; do not restart automatically".into());
             }
+            cpu_minimum = cpu_minimum.min(cpu);
+            gpu_minimum = gpu_minimum.min(gpu);
         }
         if index == 60 {
             use crate::fan_control_transport::{LinuxMetadataCapture, recorded_control_preflight};
@@ -595,6 +597,86 @@ mod tests {
             .unwrap();
         assert_eq!(post["data"]["FullSpeed_current"], false);
         assert!(post["data"]["readings"]["full_speed"].is_null());
+    }
+
+    #[test]
+    fn baseline_gradual_cooling_is_allowed() {
+        let temperatures = [36.875, 36.25, 35.625, 35.0, 34.375, 33.75];
+        let (result, calls, _) = exercise(
+            |index, frame| {
+                frame.cpu.value = Some(temperatures[index.min(temperatures.len() - 1)]);
+                frame.gpu.value = Some(32.0);
+            },
+            None,
+            false,
+        );
+        result.unwrap();
+        assert_eq!(calls, 181);
+    }
+
+    #[test]
+    fn baseline_warming_over_three_from_prior_minimum_is_rejected() {
+        for cpu in [true, false] {
+            let temperatures = if cpu {
+                [43.5, 40.0, 43.0, 43.125]
+            } else {
+                [34.0, 30.0, 33.0, 33.125]
+            };
+            let (result, calls, records) = exercise(
+                |index, frame| {
+                    let value = Some(temperatures[index]);
+                    if cpu {
+                        frame.cpu.value = value;
+                    } else {
+                        frame.gpu.value = value;
+                    }
+                },
+                None,
+                false,
+            );
+            assert!(
+                result
+                    .unwrap_err()
+                    .contains("rise exceeds 3 C from a prior minimum")
+            );
+            // Cooling and exactly +3 C pass; +3.125 C aborts without retry.
+            assert_eq!(calls, 4);
+            assert!(!records.iter().any(|r| r["event"] == "NO-WRITE-MARKER"));
+        }
+    }
+
+    #[test]
+    fn baseline_absolute_temperature_limits_remain_enforced() {
+        let (result, calls, _) = exercise(
+            |_, frame| {
+                frame.cpu.value = Some(55.0);
+                frame.gpu.value = Some(50.0);
+            },
+            None,
+            false,
+        );
+        result.unwrap();
+        assert_eq!(calls, 181);
+        for cpu in [true, false] {
+            let (result, calls, records) = exercise(
+                |_, frame| {
+                    if cpu {
+                        frame.cpu.value = Some(55.125);
+                    } else {
+                        frame.gpu.value = Some(50.125);
+                    }
+                },
+                None,
+                false,
+            );
+            assert!(
+                result
+                    .unwrap_err()
+                    .contains("temperature outside proposed trial envelope")
+            );
+            assert_eq!(calls, 1);
+            assert!(!records.iter().any(|r| r["event"] == "NO-WRITE-MARKER"));
+        }
     }
 
     #[test]
