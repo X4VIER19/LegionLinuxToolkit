@@ -7,7 +7,7 @@ set -euo pipefail
 staged=0
 if [[ ${1-} == I-AUTHORIZE-ONE-DEFAULT-83EX-FAN-PRESET && $# == 1 ]]; then
     # Not a runtime override. Requires a separately approved activation diff.
-    readonly STAGED_EXECUTION_AUTHORIZED=1
+    readonly STAGED_EXECUTION_AUTHORIZED=0
     (( STAGED_EXECUTION_AUTHORIZED == 1 )) || {
         echo 'BLOCKED: staged preset execution not authorized; no modules touched.' >&2; exit 2;
     }
@@ -22,7 +22,7 @@ helper=/tmp/legion-full-speed-approved-build-vXMsFP/legion_lenovo_fan_wmi.ko
 helper_hash=9595c09f69e84bb472e4a33ee4deb54a42a92b5e76bdfc7a09714df8aa8bc6da
 if (( staged )); then
     helper="$repo/target/fan-default-preset-staged/legion_lenovo_fan_wmi.ko"
-    helper_hash=1febdb209599ab6d6b1559977d7e6153daf91ef29e8a475c0b740ab9709d2697
+    helper_hash=365727b56e4f8539cf05993599c3f6413c3720e13805fd7f49d9035b5769face
 fi
 readonly helper helper_hash
 readonly monitor="$repo/target/debug/legion-cli-fan-trial-monitor"
@@ -47,7 +47,7 @@ for file in "$quirk" "$helper" "$monitor"; do
 done
 sha256sum --check --strict <<< "a67312115691a71c0934a24185b629b38eeed2f15fb2ca27d4db7d3e71e2faa5  $quirk
 $helper_hash  $helper
-56ab69f2994032840a9cd6e986fa6b477a869d46a2f94cc8d2d6863682262a12  $monitor"
+9d08f8b2dac87e71454afd25ea6cc15b5cedd754a9dcf4218030838a5e60f921  $monitor"
 [[ -x $monitor ]] || die 'Monitor not executable.'
 [[ $(modinfo -F name "$quirk") == yogafan_83ex ]] || die 'Quirk name mismatch.'
 [[ $(modinfo -F name "$helper") == legion_lenovo_fan_wmi ]] || die 'Helper name mismatch.'

@@ -120,7 +120,7 @@ pub fn interpret_fat2_curve_indices(
     })
 }
 
-fn map_configuration_index(
+pub(crate) fn map_configuration_index(
     profile: &[AmlCatalogueValue],
     index: u32,
 ) -> Result<IndexedCurveValue, AmlCatalogueError> {

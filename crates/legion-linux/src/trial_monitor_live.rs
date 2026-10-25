@@ -203,7 +203,7 @@ pub fn run_staged_default_trial(
     confirmation: &str,
     idle_attested: bool,
 ) -> Result<RehearsalResult, String> {
-    const EXECUTION_AUTHORIZED: bool = true;
+    const EXECUTION_AUTHORIZED: bool = false;
     if !EXECUTION_AUTHORIZED {
         return Err("default-preset execution blocked by constant false; no host access".into());
     }

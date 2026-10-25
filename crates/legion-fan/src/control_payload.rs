@@ -76,6 +76,31 @@ impl OfflineCurveProposal {
     pub fn payload(&self) -> [u8; LLT_PAYLOAD_BYTES] {
         serialize_indices(self.indices)
     }
+
+    /// Offline nominal-level preview from FNT0 package 9 (FanID=1,
+    /// SensorID=4). The caller supplies saved catalogue evidence, never a
+    /// hardware reader. Retains raw literals and the AML mathematical scale;
+    /// does not convert them to measured RPM or assert current EC selection.
+    pub fn preview_fnt0(
+        &self,
+        catalogues: &crate::AmlFanCurveCatalogues,
+    ) -> Result<[crate::IndexedCurveValue; 10], crate::AmlCatalogueError> {
+        let selection = crate::FntProfileSelection {
+            catalogue_index: 0,
+            profile_index: 9,
+        };
+        let profile = catalogues
+            .fnt
+            .first()
+            .and_then(|c| c.get(9))
+            .ok_or(crate::AmlCatalogueError::UnknownFntSelection { selection })?;
+        self.indices
+            .map(|index| crate::curve_catalog::map_configuration_index(profile, u32::from(index)))
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?
+            .try_into()
+            .map_err(|_| crate::AmlCatalogueError::UnknownFntSelection { selection })
+    }
 }
 
 fn serialize_indices(indices: [u16; 10]) -> [u8; LLT_PAYLOAD_BYTES] {
@@ -90,6 +115,57 @@ fn serialize_indices(indices: [u16; 10]) -> [u8; LLT_PAYLOAD_BYTES] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn custom_preview_preserves_fnt0_literals_and_existing_serialization() {
+        use crate::{AmlCatalogueValue, AmlFanCurveCatalogues, PhysicalInterpretation};
+        let levels = [0, 1700, 1900, 2100, 2400, 2900, 3200, 3500, 3800, 5000];
+        let mut profile = vec![
+            AmlCatalogueValue {
+                original: "Zero".into(),
+                value: 0
+            };
+            35
+        ];
+        for (position, value) in levels.into_iter().enumerate() {
+            profile[position + 3] = AmlCatalogueValue {
+                original: format!("0x{value:X}"),
+                value,
+            };
+        }
+        let catalogues = AmlFanCurveCatalogues {
+            fnt: vec![vec![profile; 15]; 5],
+            fi: vec![],
+        };
+        let indices = [2, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let proposal = OfflineCurveProposal::new(indices, CurveRules::DeclaredLltV2ToV4).unwrap();
+        let preview = proposal.preview_fnt0(&catalogues).unwrap();
+        assert_eq!(
+            preview.each_ref().map(|p| p.original_catalogue_value.value),
+            [1700, 1700, 1900, 2100, 2400, 2900, 3200, 3500, 3800, 5000]
+        );
+        assert_eq!(preview[0].original_catalogue_value.original, "0x6A4");
+        assert_eq!(preview[0].fnt_value_offset, 4);
+        assert_eq!(preview[0].mathematical_scale_divisor, 100);
+        assert_eq!(
+            preview[0].physical_interpretation,
+            PhysicalInterpretation::Unknown
+        );
+        let payload = proposal.payload();
+        assert_eq!(payload.len(), 64);
+        assert_eq!(&payload[..6], &[1, 0, 0, 0, 0, 0]);
+        for (point, index) in indices.into_iter().enumerate() {
+            assert_eq!(&payload[6 + point * 2..8 + point * 2], &index.to_le_bytes());
+        }
+        assert!(payload[26..].iter().all(|b| *b == 0));
+        assert!(
+            proposal
+                .preview_fnt0(&AmlFanCurveCatalogues {
+                    fnt: vec![],
+                    fi: vec![]
+                })
+                .is_err()
+        );
+    }
     #[test]
     fn default_matches_documented_windows_contract_byte_for_byte() {
         let expected = [

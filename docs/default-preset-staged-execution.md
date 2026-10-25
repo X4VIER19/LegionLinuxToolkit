@@ -1,4 +1,7 @@
-# Ensayo del preset predeterminado: preparado, NO AUTORIZADO
+# Ensayo del preset predeterminado: concluido, escrituras bloqueadas
+
+Resultado del primer experimento: [informe offline](first-default-preset-experiment.md).
+No autoriza repetir la escritura ni modificar la política térmica.
 
 Solo 83EX/NUCN15WW; no cambia el perfil. Se conservan FACT=FNT0 y la
 referencia Windows como evidencia histórica, no como estado actual del EC.
@@ -9,9 +12,9 @@ de OTHER_METHOD. Ningún callback ejecuta firmware. El endpoint root-only
 `/dev/legion-fan-default-preset-experimental` admite exclusivamente 64 bytes:
 selector 1, ceros reservados y UInt16 LE [1..10]. Sin ioctl, otros presets,
 fallback ni autoload. Una guardia atómica global se consume antes del intento,
-también ante errores. Las tres constantes se activaron por autorización de
-preparación; los artefactos NO se han ejecutado y la operación física sigue
-requiriendo autorización independiente.
+también ante errores. Tras el primer experimento, las tres constantes vuelven
+a shell=0, Rust=false y kernel=false. Cualquier nueva operación física sigue
+requiriendo revisión y autorización independientes.
 
 El monitor reutiliza los 60 segundos previos y 120 posteriores, los cortes
 absolutos CPU<=55/GPU<=50/RPM>=1200 y el criterio de calentamiento >3 desde
@@ -45,9 +48,9 @@ fuera de cadencia/edad, identidad incompatible o cambio de huella de fuentes.
 Un timeout del worker se puede registrar, pero un bloqueo de kernel o pérdida
 continuada de sensores no permite prometer supervisión efectiva ni recuperación.
 
-**Preparación activada, operación NO AUTORIZADA:** constantes shell 1,
-Rust true y kernel true, exactamente las tres líneas revisadas. El comando
-ya NO está bloqueado por esas constantes: NO ejecutarlo sin nueva autorización.
+**Escritura nuevamente BLOQUEADA:** constantes shell 0, Rust false y kernel
+false. El comando siguiente aborta antes de tocar módulos; no es autorización
+para reactivar ni repetir el ensayo.
 
 ```bash
 sudo bash /home/x4vier19/Documentos/GitHub/LegionLinuxToolkit/scripts/run-no-write-supervision-with-modules.sh \
@@ -69,18 +72,17 @@ de ejecutar: autorización independiente del comando concreto, con los hashes
 preparados, la contingencia térmica y la restauración manual Windows ensayada.
 Ni un log previo ni una respuesta correcta constituyen autorización.
 
-## Paquete final activado, sin ejecutar, y contingencia del operador
+## Paquete bloqueado tras el experimento y contingencia del operador
 
 El diff separado `default-preset-activation.NOT-APPLIED.patch` muestra SOLO
-las tres constantes revisadas y YA APLICADAS. Se conserva su nombre histórico;
-no volver a aplicarlo. Se comprobó con `git apply --reverse --check`, sin
-revertirlo. La autorización recibida cubre solo preparación, no operación.
-No se cambia AGENTS.md ni se amplía a otros métodos, presets o cargas.
+las tres constantes históricamente revisadas. Vuelven a estar desactivadas;
+NO volver a aplicar el diff sin nueva autorización. No se cambia AGENTS.md
+ni se amplía a otros métodos, presets o cargas.
 
-Artefactos actuales, activados pero SIN EJECUTAR/SIN CARGAR:
+Artefactos actuales recompilados BLOQUEADOS, sin carga ni consultas nuevas:
 
-- Monitor: SHA-256 `56ab69f2994032840a9cd6e986fa6b477a869d46a2f94cc8d2d6863682262a12`.
-- Helper combinado: SHA-256 `1febdb209599ab6d6b1559977d7e6153daf91ef29e8a475c0b740ab9709d2697`,
+- Monitor: SHA-256 `9d08f8b2dac87e71454afd25ea6cc15b5cedd754a9dcf4218030838a5e60f921`.
+- Helper combinado: SHA-256 `365727b56e4f8539cf05993599c3f6413c3720e13805fd7f49d9035b5769face`,
   `target/fan-default-preset-staged/legion_lenovo_fan_wmi.ko`, nombre interno
   `legion_lenovo_fan_wmi`, dependencia wmi, vermagic Nobara 7.2.11 completo.
   Las copias de C, headers y Makefile coinciden con el árbol actual y el comando
@@ -95,12 +97,12 @@ sudo bash /home/x4vier19/Documentos/GitHub/LegionLinuxToolkit/scripts/run-no-wri
   I-AUTHORIZE-TEMPORARY-MODULES-AND-NO-WRITE-SUPERVISION
 ```
 
-Monitor y helper ya reconstruidos; hashes nuevos fijados y verificados en el
-wrapper. No suprimir comprobaciones ni usar los hashes bloqueados anteriores.
+Monitor y helper ya reconstruidos; hashes bloqueados fijados y verificados en
+el wrapper. No suprimir comprobaciones ni usar los binarios activados anteriores.
 
-No ejecutar pruebas que invoquen el modo staged después de activarlo. En
-particular, NO ejecutar la antigua prueba de barrera false ni tests de la
-feature sin filtro. El filtro offline revisado es `trial_monitor::tests::`.
+Las pruebas actuales de la barrera false vuelven a ser aplicables. En una
+hipotética reactivación no deben ejecutarse: invocan el punto de entrada que
+ahora aborta antes del host. Mantener las pruebas estrictamente offline.
 La llamada final propuesta es la del wrapper con el literal del preset arriba;
 permanece NO AUTORIZADA. El modo normal del wrapper no se convierte en escritura.
 No leer a mano el endpoint FullSpeed antes: consumiría su única observación.

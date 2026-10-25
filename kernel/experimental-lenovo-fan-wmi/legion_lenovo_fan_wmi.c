@@ -114,7 +114,7 @@ static struct wmi_driver legion_fan_wmi_driver = {
 /* No setter or module parameter exists for this barrier.
  * Enabling it requires a new reviewed code change, not a load-time argument.
  */
-static const bool legion_control_execution_authorized = true;
+static const bool legion_control_execution_authorized = false;
 static atomic_t legion_control_attempted = ATOMIC_INIT(0);
 static bool legion_control_full_speed_disabled;
 static unsigned long legion_control_full_speed_at;
