@@ -35,6 +35,8 @@ mod hwmon;
 #[cfg(any(test, feature = "approved-real-hwmon-rpm-read"))]
 mod hwmon_real;
 mod offline_fan_response;
+#[cfg(any(test, feature = "experimental-fan-control-plan"))]
+pub mod trial_monitor;
 
 #[cfg(any(
     feature = "experimental-fan-wmi-transport",

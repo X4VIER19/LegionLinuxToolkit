@@ -85,6 +85,26 @@ pub fn assess_trial_sample(
     phase: TrialPhase,
     baseline: Option<&TrialSample<'_>>,
 ) -> TrialAssessment {
+    assess(sample, phase, baseline, true)
+}
+
+/// Thermal/environment supervision only. FullSpeed is deliberately NOT
+/// asserted from a cached observation: the separate boundary gate must query
+/// it freshly. This can never replace assess_trial_sample or authorize a write.
+pub fn assess_supervision_sample(
+    sample: &TrialSample<'_>,
+    phase: TrialPhase,
+    baseline: Option<&TrialSample<'_>>,
+) -> TrialAssessment {
+    assess(sample, phase, baseline, false)
+}
+
+fn assess(
+    sample: &TrialSample<'_>,
+    phase: TrialPhase,
+    baseline: Option<&TrialSample<'_>>,
+    require_full_speed: bool,
+) -> TrialAssessment {
     let policy = proposed_83ex_thermal_protocol();
     let post = phase == TrialPhase::AfterAttempt;
     let mut reasons = Vec::new();
@@ -96,7 +116,7 @@ pub fn assess_trial_sample(
     }
     if sample.ac_online != Some(true)
         || sample.custom_profile != Some(true)
-        || sample.fan_full_speed != Some(false)
+        || (require_full_speed && sample.fan_full_speed != Some(false))
         || sample.intensive_workload_absent != Some(true)
     {
         reasons.push("AC/custom/FullSpeed/no-intensive-load condition missing or changed");
@@ -131,7 +151,7 @@ pub fn assess_trial_sample(
             reasons.push("temperature outside proposed trial envelope");
         }
         if let Some(before) = baseline {
-            if assess_trial_sample(before, TrialPhase::BeforeWrite, None).disposition
+            if assess(before, TrialPhase::BeforeWrite, None, require_full_speed).disposition
                 != TrialDisposition::CandidateOnlyNotAuthorization
             {
                 reasons.push("pre-write baseline invalid");
@@ -188,6 +208,28 @@ pub fn assess_trial_sample(
 mod tests {
     use super::*;
     use legion_core::{ConfidenceLevel, FanInterpretation, TelemetryArtifact, TelemetryProvenance};
+
+    #[test]
+    fn environmental_supervision_is_not_a_fresh_full_speed_gate() {
+        let (cpu, gpu, a, b) = (
+            value(43.5, TelemetryUnit::Celsius),
+            value(34.0, TelemetryUnit::Celsius),
+            fan("channel1"),
+            fan("channel2"),
+        );
+        let mut input = sample(&cpu, &gpu, [&a, &b]);
+        input.fan_full_speed = None;
+        let environment = assess_supervision_sample(&input, TrialPhase::BeforeWrite, None);
+        assert_eq!(
+            environment.disposition,
+            TrialDisposition::CandidateOnlyNotAuthorization
+        );
+        assert!(!environment.authorizes_write);
+        assert_eq!(
+            assess_trial_sample(&input, TrialPhase::BeforeWrite, None).disposition,
+            TrialDisposition::CancelBeforeWrite
+        );
+    }
     fn value<T>(value: T, unit: TelemetryUnit) -> TelemetryValue<T> {
         TelemetryValue {
             value: Some(value),

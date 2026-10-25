@@ -1,4 +1,5 @@
 /target/
+/trial-logs/
 
 # Extracciones privadas del firmware Lenovo
 /docs/firmware-evidence/gmzn-16arp9/DSDT.aml

@@ -6,6 +6,7 @@ license.workspace = true
 authors.workspace = true
 
 [features]
+experimental-fan-trial-monitor = ["experimental-fan-control-preflight", "legion-linux/experimental-fan-trial-monitor"]
 # Opt-in forwarding only. Normal legion-cli builds retain exclusively
 # simulated sources and cannot compile the experimental real-read binary.
 approved-real-platform-profile-read = ["legion-linux/approved-real-platform-profile-read"]
@@ -14,6 +15,11 @@ approved-real-platform-profile-read = ["legion-linux/approved-real-platform-prof
 approved-real-hwmon-rpm-read = ["legion-linux/approved-real-hwmon-rpm-read"]
 experimental-fan-control-preflight = ["legion-linux/experimental-fan-control-plan"]
 experimental-fan-full-speed-read = ["legion-linux/experimental-fan-full-speed-read"]
+
+[[bin]]
+name = "legion-cli-fan-trial-monitor"
+path = "src/bin/legion-cli-fan-trial-monitor.rs"
+required-features = ["experimental-fan-control-preflight"]
 
 [[bin]]
 name = "legion-cli-fan-full-speed-read"

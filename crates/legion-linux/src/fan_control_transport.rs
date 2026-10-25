@@ -133,6 +133,56 @@ pub struct LinuxMetadataCapture {
 }
 
 impl SimulatedControlPreflight {
+    /// Crate-private integration of the monitor's current boundary evidence.
+    /// This report never emits authorization; GZ44 remains a DSDT mapping,
+    /// not a directly acquired EC value. History keeps its separate fields.
+    pub(crate) fn with_trial_supervision(
+        mut self,
+        source: &'static str,
+        custom: bool,
+        ac: bool,
+        within_envelope: bool,
+        full_speed: crate::fan_full_speed::FullSpeedObservation,
+    ) -> Self {
+        self = self.with_full_speed_observation(full_speed);
+        self.source = source;
+        let live = source == "bounded-linux-read-only-no-write-rehearsal";
+        self.checks[0].status = if live {
+            "registry-matched-in-this-rehearsal; not-physical-verification"
+        } else {
+            "registry-match-in-simulation-only"
+        };
+        self.checks[1].status = if custom && !live {
+            "custom-modelled-in-simulation-only"
+        } else if custom {
+            "custom-recent; GZ44=3-DSDT-mapping-not-direct-read"
+        } else {
+            "blocked-not-custom"
+        };
+        self.checks[4].status = if within_envelope && !live {
+            "two-channels-modelled-in-simulation-only"
+        } else if within_envelope {
+            "two-identified-quirk-channels-current-within-trial-envelope"
+        } else {
+            "blocked-monitor-evidence"
+        };
+        self.checks[5].status = if within_envelope && !live {
+            "CPU/GPU-modelled-in-simulation-only"
+        } else if within_envelope {
+            "CPU/GPU-current-within-trial-envelope"
+        } else {
+            "blocked-monitor-evidence"
+        };
+        self.checks[6].status = "prior-FACT-FNT0-capture; not-current-EC-or-future-selection-proof";
+        self.checks[7].status = if ac && !live {
+            "AC-modelled-in-simulation-only"
+        } else if ac {
+            "AC-online-at-boundary"
+        } else {
+            "blocked-AC-offline"
+        };
+        self
+    }
     /// Adds one independently acquired observation. It does not upgrade other
     /// preconditions, historical evidence, identity, or execution authority.
     pub fn with_full_speed_observation(
@@ -186,17 +236,23 @@ impl SimulatedControlPreflight {
 }
 
 /// One offline evaluation; no acquisition, retry or execution callback.
+pub(crate) fn control_identity_match(
+    registry: &CompatibilityRegistry,
+    identity: &HostIdentity,
+) -> MatchResult {
+    registry.match_query(&DeviceQuery {
+        manufacturer: identity.manufacturer().map(str::to_owned),
+        model: identity.model().map(str::to_owned),
+        machine_type: identity.product_identifier().map(str::to_owned),
+        bios_version: identity.bios_version().map(str::to_owned),
+        dmi_identifier: None,
+    })
+}
+
 pub fn simulated_control_preflight(
     registry: &CompatibilityRegistry,
     evidence: SimulatedControlPreconditions<'_>,
 ) -> SimulatedControlPreflight {
-    let query = DeviceQuery {
-        manufacturer: evidence.identity.manufacturer().map(str::to_owned),
-        model: evidence.identity.model().map(str::to_owned),
-        machine_type: evidence.identity.product_identifier().map(str::to_owned),
-        bios_version: evidence.identity.bios_version().map(str::to_owned),
-        dmi_identifier: None,
-    };
     let mut checks = Vec::new();
     let mut add = |requirement, state: Option<bool>| {
         checks.push(ControlPreflightCheck {
@@ -210,7 +266,7 @@ pub fn simulated_control_preflight(
     };
     add(
         "DMI/profile exact match in existing registry",
-        match registry.match_query(&query) {
+        match control_identity_match(registry, evidence.identity) {
             MatchResult::Exact { .. } => Some(true),
             MatchResult::Incomplete { .. } => None,
             _ => Some(false),

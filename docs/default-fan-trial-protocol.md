@@ -17,14 +17,13 @@ funcional y yogafan_83ex con FA1S/FA2S x100 observado; dos canales sin mapeo
 CPU/GPU. El yogafan original de 0 RPM no sirve de testigo. Un solo canal
 acpi_fan tampoco demuestra ambos ventiladores.
 
-**Bloqueo concreto de supervisión:** no consta una fuente de temperatura GPU
-instantánea validada en Linux. No sustituirla por acpitz, NVMe ni gpu_temp de
-lenovo_wmi_other (límite). No declarar lista la ejecución hasta identificar
-una fuente para la RTX 4060 y comprobar sus lecturas/unidades. Candidato:
-NVML/nvidia-smi del controlador ya instalado, si existe; no instalarlo ni
-ejecutarlo en esta preparación. Su consulta puede despertar la GPU y alterar
-el consumo. Esa comprobación necesita permiso independiente; ejemplo exacto
-para revisión, NO ejecutado:
+**Actualización:** el propietario confirmó `nvidia-smi` temperature.gpu=34 °C
+en Nobara. La fuente NVIDIA deja de ser una incógnita; el monitor integrado
+de [ensayo sin escritura](fan-supervision-rehearsal.md) prepara su adquisición
+reciente. Falta ejecutar ese ensayo real con los módulos/sensores disponibles;
+34 no sustituye una muestra actual. No usar acpitz, NVMe ni gpu_temp de
+lenovo_wmi_other (límite). La consulta puede despertar la GPU y alterar consumo.
+Comando de referencia aportado por el propietario:
 
 ```bash
 nvidia-smi --query-gpu=index,name,pci.bus_id,temperature.gpu --format=csv,noheader,nounits
@@ -72,7 +71,8 @@ No tocar Fn+Q, Vantage, perfiles ni curvas durante la ventana.
    que hará la llamada, visible en otra terminal/pantalla y con registro horario.
    Usar k10temp:Tctl y la fuente GPU efectivamente validada; RPM mediante el
    quirk identificado por módulo, enlace y DMI, no solo name=yogafan.
-   Usar las herramientas de diagnóstico existentes: no se añade otro monitor.
+   El monitor independiente reutiliza los proveedores de diagnóstico existentes;
+   su ensayo está descrito en fan-supervision-rehearsal.md y no ejecuta SFAN.
    Si ninguna herramienta existente proporciona esos cuatro valores, se bloquea
    el intento; una salida antigua de la CLI no es supervisión continua.
 3. Ventana finita propuesta: una muestra por segundo, 60 s previos y 120 s

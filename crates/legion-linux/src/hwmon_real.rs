@@ -2,7 +2,8 @@
 //!
 //! The production entry point is unavailable unless
 //! `approved-real-hwmon-rpm-read` is explicitly selected. It accepts no path,
-//! configuration, environment, retry, monitor, or write option. It first
+//! configuration, environment, retry, monitor, or write option. A separately
+//! gated bounded rehearsal reuses its private acquisition helpers. It first
 //! reads the four fixed DMI attributes through the existing one-shot provider,
 //! requires the exact documented 83EX identity, then enumerates fixed
 //! `/sys/class/hwmon` entries and opens only `name` plus discovered
@@ -133,7 +134,7 @@ pub fn approved_one_shot_hwmon_rpm_read(
 }
 
 #[cfg(feature = "approved-real-hwmon-rpm-read")]
-fn is_exact_target_identity(identity: &HostIdentity) -> bool {
+pub(crate) fn is_exact_target_identity(identity: &HostIdentity) -> bool {
     identity.manufacturer() == Some("Lenovo")
         && identity.product_identifier() == Some("83EX")
         && identity.model() == Some("Legion Slim 5 16ARP9")
@@ -147,6 +148,33 @@ fn is_exact_target_identity(identity: &HostIdentity) -> bool {
 struct ConfinedHwmonSource {
     root: File,
     discovery_directory: PathBuf,
+}
+
+#[cfg(any(test, feature = "experimental-fan-trial-monitor"))]
+#[derive(Debug, serde::Serialize)]
+pub(crate) struct SupervisionSysfsReading {
+    pub cpu_c: f64,
+    pub cpu_original: Vec<u8>,
+    pub cpu_source: String,
+    pub fans: [HwmonFanReading; 2],
+    pub rpm_original: [Vec<u8>; 2],
+    pub ac_online: bool,
+    pub ac_original: Vec<u8>,
+}
+
+#[cfg(feature = "experimental-fan-trial-monitor")]
+pub(crate) struct TrialSysfsSource(ConfinedHwmonSource);
+
+#[cfg(feature = "experimental-fan-trial-monitor")]
+impl TrialSysfsSource {
+    pub(crate) fn open() -> Result<Self, String> {
+        let root =
+            crate::open_fixed_sysfs_root().map_err(|error| format!("sysfs root: {error:?}"))?;
+        Ok(Self(ConfinedHwmonSource::from_linux_root(root)))
+    }
+    pub(crate) fn read_once(&self) -> Result<SupervisionSysfsReading, String> {
+        self.0.read_supervision_once(None)
+    }
 }
 
 impl ConfinedHwmonSource {
@@ -279,9 +307,18 @@ impl ConfinedHwmonSource {
 
     fn read_raw_attribute(&self, device_id: &str, entry: &str) -> Result<Vec<u8>, HwmonFanError> {
         let relative = format!("{HWMON_RELATIVE_DIRECTORY}/{device_id}/{entry}");
+        self.read_relative_attribute(&relative, device_id, entry)
+    }
+
+    fn read_relative_attribute(
+        &self,
+        relative: &str,
+        device_id: &str,
+        entry: &str,
+    ) -> Result<Vec<u8>, HwmonFanError> {
         let file = openat2(
             &self.root,
-            &relative,
+            relative,
             OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW | OFlags::NONBLOCK,
             Mode::empty(),
             ResolveFlags::BENEATH | ResolveFlags::NO_MAGICLINKS,
@@ -312,6 +349,151 @@ impl ConfinedHwmonSource {
             device_id: device_id.to_owned(),
             entry: entry.to_owned(),
             error,
+        })
+    }
+
+    /// Fixed monitor acquisition: reject original/ambiguous yogafan BEFORE
+    /// fan input reads. acpi_fan is not touched by this collector.
+    #[cfg(any(test, feature = "experimental-fan-trial-monitor"))]
+    fn read_supervision_once(
+        &self,
+        simulation_label: Option<&str>,
+    ) -> Result<SupervisionSysfsReading, String> {
+        let mut cpu_devices = Vec::new();
+        let mut fan_devices = Vec::new();
+        for entry in fs::read_dir(&self.discovery_directory).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let name = entry
+                .file_name()
+                .into_string()
+                .map_err(|_| "non-UTF8 hwmon entry")?;
+            if !is_hwmon_directory_name(&name) {
+                continue;
+            }
+            let driver = self
+                .read_text_attribute(&name, "name")
+                .map_err(|e| e.to_string())?;
+            if driver == "k10temp" {
+                cpu_devices.push(name.clone());
+            }
+            if driver == "yogafan" {
+                fan_devices.push(name);
+            }
+        }
+        if cpu_devices.len() != 1 || fan_devices.len() != 1 {
+            return Err(
+                "exactly one k10temp and one identified yogafan_83ex source required".into(),
+            );
+        }
+        let cpu_device = &cpu_devices[0];
+        let fan_device = &fan_devices[0];
+        let module = self.module_provenance(fan_device);
+        if classify_driver("yogafan", true, &module)
+            != HwmonDriverClassification::Verified83ExExperimentalQuirk
+        {
+            return Err("yogafan_83ex not bound; original/missing/ambiguous provider rejected before RPM read; no automatic substitution".into());
+        }
+        let entries = self
+            .list_device_entries(fan_device)
+            .map_err(|e| e.to_string())?;
+        let channels: Vec<_> = entries
+            .iter()
+            .filter_map(|e| fan_input_channel(e))
+            .collect();
+        if channels != [1, 2] {
+            return Err("quirk must expose exactly fan1_input and fan2_input".into());
+        }
+        let mut labels = Vec::new();
+        for entry in self
+            .list_device_entries(cpu_device)
+            .map_err(|e| e.to_string())?
+        {
+            if entry.len() > 10
+                && entry.starts_with("temp")
+                && entry.ends_with("_label")
+                && entry[4..entry.len() - 6]
+                    .bytes()
+                    .all(|c| c.is_ascii_digit())
+                && self
+                    .read_text_attribute(cpu_device, &entry)
+                    .map_err(|e| e.to_string())?
+                    == "Tctl"
+            {
+                labels.push(entry.replace("_label", "_input"));
+            }
+        }
+        if labels.len() != 1 {
+            return Err("exactly one k10temp:Tctl label required".into());
+        }
+        let cpu_original = self
+            .read_raw_attribute(cpu_device, &labels[0])
+            .map_err(|e| e.to_string())?;
+        let milli = parse_rpm(&cpu_original)?;
+        if !(5000..=110000).contains(&milli) {
+            return Err("Tctl outside trial range".into());
+        }
+        let read_fan = |channel| -> Result<(HwmonFanReading, Vec<u8>), String> {
+            let entry = format!("fan{channel}_input");
+            let original = self
+                .read_raw_attribute(fan_device, &entry)
+                .map_err(|e| e.to_string())?;
+            let rpm = parse_rpm(&original)?;
+            let reading = if let Some(label) = simulation_label {
+                build_reading(
+                    "yogafan".into(),
+                    fan_device.clone(),
+                    channel,
+                    rpm,
+                    HwmonDriverClassification::Validated83ExQuirkSimulation,
+                    HwmonModuleProvenance::StaticSimulation,
+                    HwmonReadingOrigin::StaticSimulation { root_label: label },
+                )
+            } else {
+                #[cfg(feature = "experimental-fan-trial-monitor")]
+                {
+                    build_linux_hwmon_reading(
+                        "yogafan".into(),
+                        fan_device.clone(),
+                        channel,
+                        rpm,
+                        HwmonDriverClassification::Verified83ExExperimentalQuirk,
+                        module.clone(),
+                    )
+                }
+                #[cfg(not(feature = "experimental-fan-trial-monitor"))]
+                {
+                    return Err("live monitor feature disabled".into());
+                }
+            };
+            Ok((reading, original))
+        };
+        let (fan1, raw1) = read_fan(1)?;
+        let (fan2, raw2) = read_fan(2)?;
+        if self.module_provenance(fan_device) != module {
+            return Err("quirk module provenance changed during sample".into());
+        }
+        let supply_type = self
+            .read_relative_attribute("class/power_supply/ACAD/type", "ACAD", "type")
+            .map_err(|e| e.to_string())?;
+        if supply_type != b"Mains\n" && supply_type != b"Mains" {
+            return Err("ACAD is not Mains".into());
+        }
+        let ac_original = self
+            .read_relative_attribute("class/power_supply/ACAD/online", "ACAD", "online")
+            .map_err(|e| e.to_string())?;
+        let ac_online = match ac_original.as_slice() {
+            b"1\n" | b"1" => true,
+            b"0\n" | b"0" => false,
+            _ => return Err("invalid ACAD/online".into()),
+        };
+        Ok(SupervisionSysfsReading {
+            cpu_c: f64::from(milli) / 1000.0,
+            cpu_original,
+            cpu_source: format!("k10temp:Tctl:{cpu_device}:{}", labels[0]),
+            fans: [fan1, fan2],
+            rpm_original: [raw1, raw2],
+            ac_online,
+            ac_original,
         })
     }
 
@@ -506,6 +688,80 @@ mod tests {
         assert_eq!(
             classify_driver("yogafan", true, &HwmonModuleProvenance::Missing),
             HwmonDriverClassification::Yogafan83ExCandidateUnverified
+        );
+        fs::remove_dir_all(path).unwrap();
+    }
+
+    fn supervision_fixture(name: &str) -> PathBuf {
+        let path = root(name);
+        let fan = path.join("class/hwmon/hwmon7");
+        fs::write(fan.join("name"), b"yogafan\n").unwrap();
+        fs::create_dir_all(fan.join("device/driver")).unwrap();
+        symlink("/sys/module/yogafan_83ex", fan.join("device/driver/module")).unwrap();
+        fs::write(fan.join("fan1_input"), b"1500\n").unwrap();
+        fs::write(fan.join("fan2_input"), b"1500\n").unwrap();
+        let cpu = path.join("class/hwmon/hwmon9");
+        fs::create_dir_all(&cpu).unwrap();
+        fs::write(cpu.join("name"), b"k10temp\n").unwrap();
+        fs::write(cpu.join("temp1_label"), b"Tctl\n").unwrap();
+        fs::write(cpu.join("temp1_input"), b"43500\n").unwrap();
+        let ac = path.join("class/power_supply/ACAD");
+        fs::create_dir_all(&ac).unwrap();
+        fs::write(ac.join("type"), b"Mains\n").unwrap();
+        fs::write(ac.join("online"), b"1\n").unwrap();
+        path
+    }
+
+    #[test]
+    fn supervision_collects_only_identified_quirk_tctl_and_ac_in_fixtures() {
+        let path = supervision_fixture("supervision");
+        let reading = source(&path)
+            .read_supervision_once(Some("isolated-supervision"))
+            .unwrap();
+        assert_eq!(reading.cpu_c, 43.5);
+        assert_eq!(reading.cpu_original, b"43500\n");
+        assert_eq!(reading.fans[0].rpm.value, Some(1500));
+        assert!(reading.ac_online);
+        assert_eq!(
+            reading.fans[1].rpm.provenance.artifact,
+            legion_core::TelemetryArtifact::StaticSimulation
+        );
+        assert_eq!(reading.rpm_original[1], b"1500\n");
+        fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn supervision_rejects_original_before_any_rpm_input_or_fallback() {
+        let path = supervision_fixture("supervision-original");
+        let fan = path.join("class/hwmon/hwmon7");
+        fs::remove_file(fan.join("device/driver/module")).unwrap();
+        symlink("/sys/module/yogafan", fan.join("device/driver/module")).unwrap();
+        fs::remove_file(fan.join("fan1_input")).unwrap();
+        assert!(
+            source(&path)
+                .read_supervision_once(Some("fixture"))
+                .unwrap_err()
+                .contains("before RPM read")
+        );
+        fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn supervision_rejects_disappearing_channels_and_invalid_cpu_data() {
+        let path = supervision_fixture("supervision-invalid");
+        fs::write(path.join("class/hwmon/hwmon9/temp1_input"), b"N/A\n").unwrap();
+        assert!(
+            source(&path)
+                .read_supervision_once(Some("fixture"))
+                .is_err()
+        );
+        fs::write(path.join("class/hwmon/hwmon9/temp1_input"), b"43500\n").unwrap();
+        fs::remove_file(path.join("class/hwmon/hwmon7/fan2_input")).unwrap();
+        assert!(
+            source(&path)
+                .read_supervision_once(Some("fixture"))
+                .unwrap_err()
+                .contains("exactly fan1_input")
         );
         fs::remove_dir_all(path).unwrap();
     }
