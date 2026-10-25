@@ -147,6 +147,17 @@ mod tests {
         assert_eq!(report["source"], "static-simulation");
         assert_eq!(report["execution_enabled"], false);
         assert_eq!(report["method_id"], 6);
+        assert_eq!(report["thermal_trial_protocol"]["pre_cpu_max_c"], 55.0);
+        assert_eq!(report["thermal_trial_protocol"]["pre_gpu_max_c"], 50.0);
+        assert_eq!(report["thermal_trial_protocol"]["authorizes_write"], false);
+        assert_eq!(
+            report["fact_capture_reference"]["matching_catalogues"][0],
+            0
+        );
+        assert_eq!(
+            report["fact_capture_reference"]["proves_current_ec_configuration"],
+            false
+        );
         let payload = report["payload"].as_array().unwrap();
         assert_eq!(payload.len(), 64);
         assert_eq!(payload[0], 1);

@@ -38,8 +38,23 @@ pub struct SimulatedControlPreflight {
     windows_reference_consistent: bool,
     linux_metadata_capture: Option<LinuxMetadataCapture>,
     full_speed_observation: Option<crate::fan_full_speed::FullSpeedObservation>,
+    thermal_trial_protocol: legion_fan::control_trial::ThermalTrialProtocol,
+    fact_capture_reference: FactCaptureReference,
     execution_enabled: bool,
     remaining_execution_blocks: [&'static str; 3],
+}
+
+/// Owner-reported completed Linux capture, not a fresh EC or selector read.
+#[derive(Debug, Serialize)]
+struct FactCaptureReference {
+    source: &'static str,
+    capture_bytes: usize,
+    instances: [u16; 4],
+    matching_catalogues: [u8; 1],
+    uniquely_matches_fnt0: bool,
+    historical_windows_levels_consistent: bool,
+    proves_current_ec_configuration: bool,
+    guarantees_future_sfan_selection: bool,
 }
 
 /// Historical observations supplied by the owner, never current Linux state.
@@ -152,13 +167,15 @@ impl SimulatedControlPreflight {
             .collect::<Vec<_>>()
             .join(" ");
         format!(
-            "Source: {}\nWindows reference (historical): SmartFan={} LegionZone={} {}; FanFullSpeed=false at Windows capture only\nLinux metadata capture: {:?}\nFanFullSpeed observation: {:?}\nGUID={} instance={} MethodId={}\nPayload ({} bytes): {hex}\n{checks}\nExecution enabled: false\nBlocks: {}",
+            "Source: {}\nWindows reference (historical): SmartFan={} LegionZone={} {}; FanFullSpeed=false at Windows capture only\nLinux metadata capture: {:?}\nFanFullSpeed observation: {:?}\nFACT capture reference (not current EC): {:?}\nProposed thermal trial (not authorization): {:?}\nGUID={} instance={} MethodId={}\nPayload ({} bytes): {hex}\n{checks}\nExecution enabled: false\nBlocks: {}",
             self.source,
             self.windows_reference.smart_fan_version,
             self.windows_reference.legion_zone_version,
             self.windows_reference.controller,
             self.linux_metadata_capture,
             self.full_speed_observation,
+            self.fact_capture_reference,
+            self.thermal_trial_protocol,
             self.guid,
             self.instance,
             self.method_id,
@@ -250,10 +267,21 @@ pub fn simulated_control_preflight(
         windows_reference_consistent: windows_v2_reference().validate(),
         linux_metadata_capture: None,
         full_speed_observation: None,
+        thermal_trial_protocol: legion_fan::control_trial::proposed_83ex_thermal_protocol(),
+        fact_capture_reference: FactCaptureReference {
+            source: "owner-reported-successful-Linux-FACT-capture; historical-not-live; module-unloaded",
+            capture_bytes: 316,
+            instances: [6, 9, 10, 11],
+            matching_catalogues: [0],
+            uniquely_matches_fnt0: true,
+            historical_windows_levels_consistent: true,
+            proves_current_ec_configuration: false,
+            guarantees_future_sfan_selection: false,
+        },
         execution_enabled: plan.execution_enabled(),
         remaining_execution_blocks: [
             "kernel constant false and no write endpoint",
-            "real acquisition and freshness of preconditions not implemented",
+            "fresh independent CPU/GPU and two reliable RPM channels plus other preconditions required",
             "separate authorization and approved partial-write recovery required",
         ],
     }
