@@ -1,0 +1,52 @@
+From: LegionLinuxToolkit contributors
+Subject: [RFC] hwmon: yogafan: add Legion Slim 5 16ARP9 (83EX)
+
+Basis: CachyOS/linux `cachyos-7.2.11-1`, commit
+b0ce79ee33ddd93d513f77341167956e1355758e. The source file used for review
+has SHA-256 87da68973bbe5ed6c42c179ba7884be50f5263321605ebecf35c60989d410c99.
+
+License: GPL-2.0-only. This patch targets the GPL-2.0-only kernel driver. It
+is separate from LegionLinuxToolkit's Rust crates (MIT OR Apache-2.0). Nothing
+applies, builds, installs, or loads it automatically.
+
+The narrow DMI rule must precede the generic Legion rule. BIOS NUCN15WW is
+evidence for this quirk, not a restrictive DMI condition.
+
+---
+ drivers/hwmon/yogafan.c | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/drivers/hwmon/yogafan.c b/drivers/hwmon/yogafan.c
+--- a/drivers/hwmon/yogafan.c
++++ b/drivers/hwmon/yogafan.c
+@@ -70,7 +70,13 @@ static const struct yogafan_config legion_16bit_dual_cfg = {
+ 	.fan_count = 2,
+ 	.paths = { "\\_SB.PCI0.LPC0.EC0.FANS", "\\_SB.PCI0.LPC0.EC0.FA2S" }
+ };
+ 
++static const struct yogafan_config legion_slim_5_16arp9_8bit_dual_cfg = {
++	.multiplier = 100,
++	.fan_count = 2,
++	.paths = { "\\_SB.PCI0.LPC0.EC0.FA1S", "\\_SB.PCI0.LPC0.EC0.FA2S" }
++};
++
+ static void apply_rllag_filter(struct yoga_fan_data *data, int idx, long raw_rpm)
+ {
+ 	ktime_t now = ktime_get_boottime();
+@@ -170,6 +176,16 @@ static const struct hwmon_chip_info yoga_fan_chip_info = {
+ };
+ 
+ static const struct dmi_system_id yogafan_quirks[] = {
++	{
++		.ident = "Lenovo Legion Slim 5 16ARP9 (83EX)",
++		.matches = {
++			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
++			DMI_MATCH(DMI_PRODUCT_NAME, "83EX"),
++			DMI_MATCH(DMI_PRODUCT_VERSION, "Legion Slim 5 16ARP9"),
++		},
++		.driver_data = (void *)&legion_slim_5_16arp9_8bit_dual_cfg,
++	},
++
+ 	{
+ 		.ident = "Lenovo Yoga",
+ 		.matches = {

@@ -9,3 +9,16 @@ else
 $(error CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI_CONTROL_STAGING must be unset or exactly y)
 endif
 endif
+
+# This standalone fragment is not included in the kernel's Kconfig tree, so a
+# command-line CONFIG value selects obj-m but does not create a C preprocessor
+# macro. Make that bridge explicit and fail closed: only the literal `y` may
+# compile the firmware-call path; unset keeps it disabled and every other
+# value is rejected instead of being interpreted permissively.
+ifneq ($(strip $(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI_REAL_READ)),)
+ifeq ($(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI_REAL_READ),y)
+ccflags-y += -DCONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI_REAL_READ=1
+else
+$(error CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_WMI_REAL_READ must be unset or exactly y)
+endif
+endif
