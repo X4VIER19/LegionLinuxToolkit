@@ -6,6 +6,7 @@ license.workspace = true
 authors.workspace = true
 
 [features]
+experimental-fact-read = []
 # Deliberately opt-in and never enabled by default. It exposes only the
 # separately reviewed, one-shot experimental binary; it must not be used by
 # normal builds, tests, or legion-cli.

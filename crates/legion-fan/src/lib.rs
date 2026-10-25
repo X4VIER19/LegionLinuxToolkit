@@ -16,6 +16,7 @@ use std::{collections::BTreeSet, fmt};
 pub mod control_evidence;
 pub mod control_payload;
 mod curve_catalog;
+pub mod fact;
 pub mod fan_full_speed;
 mod fan_get_table;
 mod fan_get_table_abi;

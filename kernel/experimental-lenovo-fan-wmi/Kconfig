@@ -15,6 +15,16 @@ config LEGION_LINUX_EXPERIMENTAL_FAN_WMI
 	  explicitly authorizes both a kernel integration and a one-shot read-only
 	  Fan_Get_Table experiment for the documented machine and BIOS.
 
+config LEGION_LINUX_EXPERIMENTAL_FACT_READ
+	bool "Explicit one-shot FACT catalogue batch"
+	depends on LEGION_LINUX_EXPERIMENTAL_FAN_WMI && ACPI_WMI
+	default n
+	help
+	  Fixed WQA7 instances 6,9,10,11. Requires runtime confirmation and exact
+	  DMI/BIOS. No WMI driver registration, setters or implicit queries.
+	  A batch is four queries, stops at first error and cannot be retried
+	  during that module load. Rejects a visible WCA7 collection method.
+
 config LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ
 	bool "Explicit one-shot GetFeatureValue FanFullSpeed observation"
 	depends on LEGION_LINUX_EXPERIMENTAL_FAN_WMI && ACPI_WMI

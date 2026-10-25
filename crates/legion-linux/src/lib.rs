@@ -26,6 +26,7 @@ use std::{
     fmt,
 };
 
+pub mod fact_capture;
 #[cfg(any(test, feature = "experimental-fan-control-plan"))]
 pub mod fan_control_transport;
 pub mod fan_full_speed;

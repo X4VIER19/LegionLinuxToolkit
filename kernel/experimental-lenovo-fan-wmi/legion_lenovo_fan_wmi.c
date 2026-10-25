@@ -64,7 +64,7 @@ static_assert(sizeof(struct legion_fan_get_table_fat2) ==
  */
 /* Local exclusion only: it is not the native driver's transaction lock. */
 static DEFINE_MUTEX(legion_fan_wmi_lock);
-#if !IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ)
+#if !IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ) && !IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FACT_READ)
 static const struct wmi_device_id legion_fan_wmi_id_table[] = {
 	{ .guid_string = LENOVO_FAN_WMI_GUID },
 	{}
@@ -296,6 +296,62 @@ static struct miscdevice legion_fan_endpoint = {
 	.fops = &legion_fan_endpoint_fops,
 };
 
+#if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FACT_READ)
+#include "fact_query.h"
+static_assert(sizeof(struct legion_fact_response) == LEGION_FACT_RESPONSE_BYTES);
+static char *fact_confirmation;
+module_param(fact_confirmation, charp, 0400);
+static atomic_t fact_attempted = ATOMIC_INIT(0);
+
+static ssize_t legion_fact_read(struct file *file, char __user *buffer,
+			       size_t count, loff_t *offset)
+{
+	struct legion_fact_response response = {
+		.version = cpu_to_le16(1), .header_size = cpu_to_le16(12),
+	};
+	acpi_handle handle;
+	acpi_status status;
+	(void)file;
+	if (*offset)
+		return 0;
+	if (count < sizeof(response))
+		return -EMSGSIZE;
+	if (!fact_confirmation || strcmp(fact_confirmation,
+		"I-UNDERSTAND-ONE-SHOT-FACT-CAPTURE"))
+		return -EPERM;
+	if (!dmi_match(DMI_SYS_VENDOR, "LENOVO") ||
+	    !dmi_match(DMI_PRODUCT_NAME, "83EX") ||
+	    !dmi_match(DMI_PRODUCT_VERSION, "Legion Slim 5 16ARP9") ||
+	    !dmi_match(DMI_BIOS_VERSION, "NUCN15WW"))
+		return -ENODEV;
+	if (atomic_cmpxchg(&fact_attempted, 0, 1))
+		return -EALREADY;
+	*offset = sizeof(response); /* Consume before any acquisition, even on error. */
+	/* WMI data marked expensive may invoke WC. Refuse any such method;
+	 * this is namespace lookup only, not method evaluation. GMZN is GZFD
+	 * in the recovered DSDT. The reviewed namespace/GUID must stay fixed.
+	 */
+	status = acpi_get_handle(NULL, "\\_SB.GZFD.WCA7", &handle);
+	if (status != AE_NOT_FOUND)
+		return -EOPNOTSUPP;
+	if (wmi_instance_count(LEGION_FACT_GUID) != 15)
+		return -ENODEV;
+	mutex_lock(&legion_fan_wmi_lock);
+	legion_fact_evaluate(&response);
+	mutex_unlock(&legion_fan_wmi_lock);
+	if (copy_to_user(buffer, &response, sizeof(response)))
+		return -EFAULT;
+	return sizeof(response);
+}
+static const struct file_operations legion_fact_fops = {
+	.owner = THIS_MODULE, .open = nonseekable_open, .read = legion_fact_read,
+};
+static struct miscdevice legion_fact_endpoint = {
+	.minor = MISC_DYNAMIC_MINOR, .name = "legion-fact-read-experimental",
+	.fops = &legion_fact_fops, .mode = 0400,
+};
+#endif
+
 #if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ)
 /* Explicit runtime authorization, immutable through sysfs. Never evaluated
  * during init/probe/remove. This parameter authorizes ONLY the fixed read.
@@ -355,6 +411,14 @@ static int __init legion_fan_endpoint_init(void)
 	if (error)
 		return error;
 
+#if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FACT_READ)
+	error = misc_register(&legion_fact_endpoint);
+	if (error) {
+		misc_deregister(&legion_fan_endpoint);
+		return error;
+	}
+#endif
+
 #if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ)
 	error = misc_register(&legion_full_speed_endpoint);
 	if (error) {
@@ -363,7 +427,7 @@ static int __init legion_fan_endpoint_init(void)
 	}
 #endif
 
-#if !IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ)
+#if !IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ) && !IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FACT_READ)
 	error = wmi_driver_register(&legion_fan_wmi_driver);
 	if (error) {
 #if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ)
@@ -378,8 +442,11 @@ static int __init legion_fan_endpoint_init(void)
 
 static void __exit legion_fan_endpoint_exit(void)
 {
-#if !IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ)
+#if !IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ) && !IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FACT_READ)
 	wmi_driver_unregister(&legion_fan_wmi_driver);
+#endif
+#if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FACT_READ)
+	misc_deregister(&legion_fact_endpoint);
 #endif
 #if IS_ENABLED(CONFIG_LEGION_LINUX_EXPERIMENTAL_FAN_FULL_SPEED_READ)
 	misc_deregister(&legion_full_speed_endpoint);

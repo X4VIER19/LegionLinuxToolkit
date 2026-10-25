@@ -19,8 +19,6 @@ use std::{
     path::{Component, Path},
 };
 
-const MAXIMUM_CAPTURE_BYTES: usize = FAN_KERNEL_ENDPOINT_RESPONSE_SIZE_BYTES + 1;
-
 /// This label describes an already captured file, not a live hardware query.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -116,6 +114,22 @@ impl std::error::Error for OfflineFanResponseError {}
 pub fn analyze_offline_fan_response_file(
     path: &Path,
 ) -> Result<OfflineFanResponseAnalysis, OfflineFanResponseError> {
+    let bytes = read_offline_regular_file(path, FAN_KERNEL_ENDPOINT_RESPONSE_SIZE_BYTES)?;
+    if bytes.len() != FAN_KERNEL_ENDPOINT_RESPONSE_SIZE_BYTES {
+        return Err(OfflineFanResponseError::UnexpectedLength {
+            actual: bytes.len(),
+        });
+    }
+    decode_kernel_endpoint_bytes(&bytes)
+        .map(OfflineFanResponseAnalysis::from)
+        .map_err(OfflineFanResponseError::Contract)
+}
+
+/// Shared bounded offline acquisition. Never opens a device or follows links.
+pub(crate) fn read_offline_regular_file(
+    path: &Path,
+    limit: usize,
+) -> Result<Vec<u8>, OfflineFanResponseError> {
     if !path.is_absolute() {
         return Err(OfflineFanResponseError::RelativePath);
     }
@@ -146,30 +160,23 @@ pub fn analyze_offline_fan_response_file(
         });
     }
 
-    let bytes = read_at_most_101_bytes(&file)?;
-    if bytes.len() != FAN_KERNEL_ENDPOINT_RESPONSE_SIZE_BYTES {
-        return Err(OfflineFanResponseError::UnexpectedLength {
-            actual: bytes.len(),
-        });
-    }
-    decode_kernel_endpoint_bytes(&bytes)
-        .map(OfflineFanResponseAnalysis::from)
-        .map_err(OfflineFanResponseError::Contract)
+    read_bounded_offline_bytes(&file, limit)
 }
 
-fn read_at_most_101_bytes(file: &File) -> Result<Vec<u8>, OfflineFanResponseError> {
-    let mut bytes = Vec::with_capacity(MAXIMUM_CAPTURE_BYTES);
+fn read_bounded_offline_bytes(
+    file: &File,
+    limit: usize,
+) -> Result<Vec<u8>, OfflineFanResponseError> {
+    let mut bytes = Vec::new();
     loop {
-        let mut chunk = [0_u8; MAXIMUM_CAPTURE_BYTES];
-        let requested = MAXIMUM_CAPTURE_BYTES - bytes.len();
+        let mut chunk = [0_u8; 4096];
+        let requested = chunk.len().min(limit + 1 - bytes.len());
         match read(file, &mut chunk[..requested]) {
             Ok(0) => return Ok(bytes),
             Ok(count) => {
                 bytes.extend_from_slice(&chunk[..count]);
-                if bytes.len() == MAXIMUM_CAPTURE_BYTES {
-                    return Err(OfflineFanResponseError::TooLarge {
-                        limit: FAN_KERNEL_ENDPOINT_RESPONSE_SIZE_BYTES,
-                    });
+                if bytes.len() == limit + 1 {
+                    return Err(OfflineFanResponseError::TooLarge { limit });
                 }
             }
             Err(Errno::INTR) => return Err(OfflineFanResponseError::ReadInterrupted),
